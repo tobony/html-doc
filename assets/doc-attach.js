@@ -14,8 +14,11 @@
       el.querySelectorAll('[aria-expanded]').forEach(function(b){b.setAttribute('aria-expanded','false');});
       el.querySelectorAll('.on').forEach(function(b){b.classList.remove('on');});
       el.querySelectorAll('#doc-hist-list,#doc-hist-preview').forEach(function(b){b.textContent='';});
-      var toggle=el.querySelector('#doc-editToggle');if(toggle)toggle.textContent='✎ 편집';
-      var save=el.querySelector('#doc-saveBtn');if(save)save.title='최초 저장 시 대상 파일 선택 (Cmd/Ctrl+S)';
+      [['#doc-viewBtn',true],['#doc-editToggle',false],['#doc-changesBtn',false]].forEach(function(p){var mode=el.querySelector(p[0]);if(mode){mode.classList.toggle('on',p[1]);mode.setAttribute('aria-pressed',String(p[1]));}});
+      var status=el.querySelector('#doc-saveStatus');if(status){status.setAttribute('data-state','clean');status.title='마지막 저장 이후 바뀐 내용이 없습니다';}
+      var statusText=el.querySelector('#doc-saveStatusText');if(statusText)statusText.textContent='변경 없음';
+      var dismiss=el.querySelector('#doc-saveStatusDismiss');if(dismiss)dismiss.hidden=true;
+      var save=el.querySelector('#doc-saveBtn');if(save){save.title='최초 저장 시 대상 파일 선택 (Cmd/Ctrl+S)';save.removeAttribute('aria-busy');}
       var attach=el.querySelector('#doc-attachBtn');if(attach)attach.disabled=false;
       var msg=el.querySelector('.msg');if(id==='doc-restore-banner' && msg)msg.textContent='자동저장본이 있습니다. 복구하시겠어요?';
       if(id==='doc-toast')el.textContent='';

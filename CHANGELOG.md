@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.0
+
+- Replace the control cluster with an app bar. **보기 · 편집 · 검토** is one mode switch; exactly one mode is pressed (`aria-pressed`). **검토** is the former **변경 사항** and is no longer hidden in a menu.
+- Show the save state in the bar at all times: 변경 없음, 저장 안 됨, 저장 중…, 저장됨 · time, 사본 다운로드함, 저장 실패. A download is never shown as 저장됨, because it does not overwrite the original file. Failures stay until the next successful save or until dismissed with ×.
+- Saving keeps edit mode. The saved file still opens in view mode with a clean status.
+- Ask before leaving the page only when the browser backup has also failed and unsaved changes exist.
+- Move 다른 이름으로 저장, 배포용 HTML 저장, HTML에 편집기 추가, 히스토리 and 인쇄 into a ⋯ menu at every width, with arrow, Home/End, Tab and Escape keys.
+- In desktop view mode the bar floats and does not push the document. In edit and review modes it docks at the top with the toolbar or the comparison bar below it, so the two no longer overlap.
+- Escape closes one layer at a time (history, menu, panel, review) and returns focus to the control that opened it. Escape in a text field, a select or the document text being edited leaves panels and review mode open and keeps the focus there. The history dialog traps Tab focus.
+- At 560px and below the save state moves to a second row. Small UI text is at least 12px.
+- Add `DocEditor.mode()` and `DocEditor.saveStatus()`.
+
 ## 1.7.0
 
 - Add block deletion. **블록 선택** outlines the block at the caret and widens to the parent on a second press; **블록 삭제** removes it, with 되돌리기 in a toast and Ctrl/Cmd+Z right after the deletion.

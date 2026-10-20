@@ -232,12 +232,25 @@ check('notes ui: a note that lost its mark shows a badge', await page.evaluate((
 }));
 check('notes ui: name field shows and stores the author', await page.evaluate(()=>{ const i=document.getElementById('doc-notesAuthor'), shown=i.value==='검토자'; i.value='새 이름'; i.dispatchEvent(new Event('change')); return shown && localStorage.getItem('docedit:author')==='새 이름'; }));
 check('notes ui: saved html has no open panel state or typed text', await page.evaluate(()=>{ document.getElementById('doc-notesInput').value='임시'; const d=new DOMParser().parseFromString(window.DocEditor.getHTML(),'text/html'), ro=new DOMParser().parseFromString(window.DocEditor.getReadOnlyHTML(),'text/html'); return !d.body.classList.contains('doc-notes-open') && d.getElementById('doc-notesList').innerHTML==='' && d.getElementById('doc-notesInput').textContent==='' && !d.getElementById('doc-notesAuthor').hasAttribute('value') && d.getElementById('doc-notesBtn').getAttribute('aria-expanded')==='false' && !d.getElementById('doc-notesBtn').classList.contains('on') && !ro.body.classList.contains('doc-notes-open'); }));
-check('notes ui: toolbar button opens the panel and Escape closes it', await page.evaluate(()=>{
+check('notes ui: Escape in the note input keeps the panel open and the focus in place', await page.evaluate(()=>{
   window.DocEditor.edit(true); document.getElementById('doc-ebNote').click();
-  const opened=document.body.classList.contains('doc-notes-open') && document.activeElement===document.getElementById('doc-notesInput') && document.getElementById('doc-notesBtn').classList.contains('on');
-  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
-  const closed=!document.body.classList.contains('doc-notes-open') && !document.getElementById('doc-notesBtn').classList.contains('on');
-  window.DocEditor.edit(false); return opened && closed;
+  const input=document.getElementById('doc-notesInput');
+  const opened=document.body.classList.contains('doc-notes-open') && document.activeElement===input && document.getElementById('doc-notesBtn').classList.contains('on');
+  input.value='쓰던 메모';
+  const ev=new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}); input.dispatchEvent(ev);
+  const kept=document.body.classList.contains('doc-notes-open') && document.activeElement===input && input.value==='쓰던 메모' && !ev.defaultPrevented && window.DocEditor.isEditing();
+  return opened && kept;
+}));
+check('notes ui: Escape from a panel control closes only that panel and returns focus', await page.evaluate(()=>{
+  const c=document.getElementById('doc-content'), close=document.getElementById('doc-notesClose');
+  document.getElementById('doc-notesInput').value=''; close.click();
+  window.DocEditor.edit(false); c.innerHTML='<p>하나</p><p>둘</p>'; window.DocEditor.compareWith('session');
+  document.getElementById('doc-notesBtn').click(); close.focus();
+  const ready=document.body.classList.contains('doc-notes-open') && window.DocEditor.isComparing() && document.activeElement===close;
+  close.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+  const one=!document.body.classList.contains('doc-notes-open') && window.DocEditor.isComparing() && document.activeElement===document.getElementById('doc-notesBtn') && document.getElementById('doc-notesBtn').getAttribute('aria-expanded')==='false';
+  window.DocEditor.compare(false);
+  return ready && one;
 }));
 check('notes ui: a half-typed reply survives another card changing', await page.evaluate(()=>{
   const a=window.DocEditor.notes.add('첫 메모'), b=window.DocEditor.notes.add('둘째 메모');
@@ -401,14 +414,15 @@ check('responsive: notes panel and changes bar fit narrow screens', await page.e
     const w=f.contentWindow, d=w.document, settle=()=>new Promise(r=>w.requestAnimationFrame(()=>w.requestAnimationFrame(r)));
     const rect=id=>d.getElementById(id).getBoundingClientRect(), shown=id=>w.getComputedStyle(d.getElementById(id)).display!=='none';
     await settle();
-    const controls=rect('doc-controls');
-    const rowOk=controls.height<70 && rect('doc-notesBtn').right<=width && rect('doc-notesBtn').height>=44;
+    // 560px 이하에서는 저장 상태가 둘째 줄로 내려간다.
+    const controls=rect('doc-controls'), rowMax=width<=560?100:70;
+    const rowOk=controls.height<rowMax && rect('doc-notesBtn').right<=width && rect('doc-notesBtn').height>=44;
     d.getElementById('doc-notesBtn').click(); await settle();
     const panel=rect('doc-notes-panel');
     const panelOk=shown('doc-notes-panel') && panel.left>=0 && panel.right<=width+1 && panel.top>=controls.bottom-1 && panel.bottom<=height+1;
     d.getElementById('doc-notesClose').click();
     d.getElementById('doc-editToggle').click(); await settle();
-    const editOk=!shown('doc-notesBtn') && rect('doc-controls').height<70 && d.documentElement.scrollWidth<=width+1;
+    const editOk=!shown('doc-notesBtn') && rect('doc-controls').height<rowMax && d.documentElement.scrollWidth<=width+1;
     d.getElementById('doc-ebNote').click(); await settle();
     const editPanelOk=shown('doc-notes-panel') && rect('doc-notes-panel').top>=rect('doc-editbar').bottom-1;
     d.getElementById('doc-notesClose').click(); d.getElementById('doc-editToggle').click(); await settle();
@@ -570,5 +584,81 @@ check('block: 히스토리 복원 뒤 Ctrl+Z가 버려진 블록을 되살리지
   return !document.getElementById('f-x') && !!document.querySelector('.card') && c.querySelectorAll('.card > *').length===3;
 }));
 await page.evaluate(()=>{ window.DocEditor.edit(false); Object.keys(localStorage).filter(k=>k.startsWith('docedit:')).forEach(k=>localStorage.removeItem(k)); });
+
+// ---- G. 앱 바: 모드 · 저장 상태 · 파일 작업 메뉴 ----
+await fresh();
+check('appbar: 보기·편집·검토 중 하나만 눌린다', await page.evaluate(()=>{
+  const pressed=()=>['doc-viewBtn','doc-editToggle','doc-changesBtn'].filter(id=>document.getElementById(id).getAttribute('aria-pressed')==='true').join(',');
+  const s=[pressed()];
+  document.getElementById('doc-editToggle').click(); s.push(pressed(), window.DocEditor.mode());
+  document.getElementById('doc-changesBtn').click(); s.push(pressed(), String(window.DocEditor.isEditing()), window.DocEditor.mode());
+  document.getElementById('doc-viewBtn').click(); s.push(pressed(), String(window.DocEditor.isComparing()));
+  window.DocEditor.mode('edit'); s.push(pressed()); window.DocEditor.mode('view');
+  return s.join('|')==='doc-viewBtn|doc-editToggle|edit|doc-changesBtn|false|review|doc-viewBtn|false|doc-editToggle';
+}));
+check('appbar: 입력하면 저장 안 됨, 파일에 쓰면 저장됨, 편집 모드는 유지', await page.evaluate(async()=>{
+  const st=()=>window.DocEditor.saveStatus(), s=[st().state+':'+st().text];
+  window.DocEditor.edit(true);
+  const c=document.getElementById('doc-content'); c.innerHTML='<p>상태 확인</p>'; c.dispatchEvent(new Event('input',{bubbles:true}));
+  s.push(st().state+':'+st().text);
+  window.__qaHandle={name:'상태.html',queryPermission:async()=>'granted',createWritable:async()=>({write:async()=>{},close:async()=>{}})};
+  window.showSaveFilePicker=async()=>window.__qaHandle;
+  await window.DocEditor.save();
+  const saved=st(), keptEditing=window.DocEditor.isEditing();
+  const d=new DOMParser().parseFromString(window.DocEditor.getHTML(),'text/html');
+  const serialized=d.getElementById('doc-saveStatus').getAttribute('data-state')==='clean' && d.getElementById('doc-viewBtn').getAttribute('aria-pressed')==='true' && d.getElementById('doc-editToggle').getAttribute('aria-pressed')==='false';
+  window.DocEditor.edit(false);
+  return s.join('|')==='clean:변경 없음|dirty:저장 안 됨' && saved.state==='saved' && !saved.dirty && saved.text.startsWith('저장됨') && keptEditing && serialized;
+}));
+check('appbar: 쓰기 권한 거부는 닫을 때까지 남고, 닫으면 저장 안 됨으로 돌아간다', await page.evaluate(async()=>{
+  const c=document.getElementById('doc-content'); c.innerHTML='<p>권한 확인</p>'; c.dispatchEvent(new Event('input',{bubbles:true}));
+  // 앞 검사에서 연결한 핸들의 권한을 거두면 다음 저장이 권한을 묻고 거부된다.
+  const h=window.__qaHandle; h.queryPermission=async()=>'prompt'; h.requestPermission=async()=>'denied';
+  await window.DocEditor.save();
+  const err=window.DocEditor.saveStatus(), x=document.getElementById('doc-saveStatusDismiss'), shown=!x.hidden;
+  c.dispatchEvent(new Event('input',{bubbles:true}));
+  const stays=window.DocEditor.saveStatus().state==='error';
+  x.click();
+  return err.state==='error' && err.reason==='permission' && shown && stays && window.DocEditor.saveStatus().state==='dirty' && x.hidden;
+}));
+check('appbar: 파일에 쓰지 못하고 내려받으면 저장됨이 아니라 사본 다운로드', await page.evaluate(async()=>{
+  // 연결한 파일에 쓰다 실패해 내려받은 경우
+  const h=window.__qaHandle; h.queryPermission=async()=>'granted'; h.createWritable=async()=>{ throw new Error('disk full'); };
+  const c=document.getElementById('doc-content'); c.innerHTML='<p>다운로드 확인</p>'; c.dispatchEvent(new Event('input',{bubbles:true}));
+  await window.DocEditor.save();
+  const fallback=window.DocEditor.saveStatus();
+  // 파일 시스템 API 없이 다른 이름으로 저장한 경우
+  delete window.showSaveFilePicker;
+  c.innerHTML='<p>다운로드 확인 2</p>'; c.dispatchEvent(new Event('input',{bubbles:true}));
+  document.getElementById('doc-saveAsBtn').click();
+  for(let i=0;i<50 && window.DocEditor.saveStatus().state!=='downloaded';i++) await new Promise(r=>setTimeout(r,20));
+  const plain=window.DocEditor.saveStatus();
+  return fallback.state==='downloaded' && fallback.text==='파일 저장 실패 · 사본 다운로드' && plain.state==='downloaded' && plain.text==='사본 다운로드함' && !plain.dirty;
+}));
+await page.locator('#doc-moreToggle').focus();
+await page.keyboard.press('ArrowDown');
+const menuFirst=await page.evaluate(()=>document.activeElement.id+'|'+document.getElementById('doc-moreToggle').getAttribute('aria-expanded'));
+await page.keyboard.press('End');
+const menuLast=await page.evaluate(()=>document.activeElement.id);
+await page.keyboard.press('Escape');
+check('appbar: ⋯ 메뉴는 화살표로 열고 이동하며 Esc로 닫고 버튼으로 돌아간다', menuFirst==='doc-saveAsBtn|true' && menuLast==='doc-printBtn' && await page.evaluate(()=>document.activeElement.id==='doc-moreToggle' && document.getElementById('doc-moreToggle').getAttribute('aria-expanded')==='false'));
+// 위 화살표로 열면 마지막 항목, 양 끝에서 감아 돌고, Home은 첫 항목, Tab은 메뉴를 닫는다.
+await page.keyboard.press('ArrowUp');
+const upOpen=await page.evaluate(()=>document.activeElement.id);
+await page.keyboard.press('ArrowDown');
+const wrapped=await page.evaluate(()=>document.activeElement.id);
+await page.keyboard.press('End'); await page.keyboard.press('Home');
+const home=await page.evaluate(()=>document.activeElement.id);
+await page.keyboard.press('Tab');
+check('appbar: ⋯ 메뉴 화살표 순환 · Home · Tab으로 닫힘', upOpen==='doc-printBtn' && wrapped==='doc-saveAsBtn' && home==='doc-saveAsBtn' && await page.evaluate(()=>{
+  const m=document.getElementById('doc-more-actions'), items=[...m.querySelectorAll('[role="menuitem"]')];
+  return document.getElementById('doc-moreToggle').getAttribute('aria-expanded')==='false' && getComputedStyle(m).display==='none' && !m.contains(document.activeElement) && items.every(b=>b.tabIndex===-1);
+}));
+await page.evaluate(()=>{ document.getElementById('doc-notesBtn').click(); document.getElementById('doc-moreToggle').click(); });
+await page.keyboard.press('Escape');
+const escOne=await page.evaluate(()=>document.body.classList.contains('doc-notes-open') && !document.getElementById('doc-controls').classList.contains('doc-more-open'));
+await page.keyboard.press('Escape');
+check('appbar: Esc는 맨 위 층 하나만 닫는다', escOne && await page.evaluate(()=>!document.body.classList.contains('doc-notes-open')));
+await page.evaluate(()=>{ Object.keys(localStorage).filter(k=>k.startsWith('docedit:')).forEach(k=>localStorage.removeItem(k)); });
 
 console.log(JSON.stringify({pass:true,count:results.length,results}));

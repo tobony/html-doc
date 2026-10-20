@@ -83,6 +83,8 @@ const MINIMAL='<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title
 const GRID='<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>g</title><style>#doc-content{display:grid;grid-template-columns:1fr 1fr}</style></head><body><main id="doc-content"><h1>Hello</h1><p>first</p></main></body></html>';
 async function realType(src,id){
   await page.evaluate(([html,fid])=>{
+    // srcdoc 문서는 ID가 없어 같은 경로 키 백업을 공유한다. 앞 검사의 백업 복구 배너가 본문을 가리지 않게 지운다.
+    Object.keys(localStorage).filter(k=>k.startsWith('docedit:autosave:url:')&&k.endsWith('srcdoc')).forEach(k=>localStorage.removeItem(k));
     const bundle=JSON.parse(document.getElementById('editor-bundle').textContent);
     const f=document.createElement('iframe');f.id=fid;f.style.cssText='width:700px;height:420px;border:0';
     f.srcdoc=window.DocEditorAttach.convert(html,bundle);document.body.appendChild(f);

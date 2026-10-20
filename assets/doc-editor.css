@@ -7,15 +7,24 @@
      읽지도 덮지도 않음. 문서가 --doc-ed-accent 등을 정의하면
      편집 UI 색만 선택적으로 그 값을 따른다.
    - 크롬은 전부 position:fixed 플로팅. 문서 레이아웃을 리플로하지 않음.
-   - 보기 모드: 컨트롤 클러스터만 노출. 편집 모드에서만 툴바·패널 등장.
+   - 보기 모드: 앱 바만 오른쪽 위에 떠 있고 문서를 밀어내지 않음.
+     편집·검토 모드에서만 앱 바가 위쪽에 붙고 그 아래에 도구 줄이 놓임.
    - 본문 편집은 #doc-content에 한정. 별도 크롬과 body 편집 상태를 관리.
    ============================================================ */
 
-/* ---------- 컨트롤 클러스터 (항상 노출 · 편집 재진입/저장 통로) ---------- */
+/* ---------- 앱 바 (항상 노출 · 모드 / 저장 상태 / 메모 / 저장 / 파일 작업) ---------- */
 #doc-controls{
   position:fixed; top:12px; right:14px; z-index:2147483001;
-  display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:flex-end;
+  display:flex; gap:6px; align-items:center; flex-wrap:nowrap; justify-content:flex-end;
+  max-width:calc(100vw - 28px); padding:5px;
+  background:var(--doc-ed-paper,#fff); border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:12px;
+  box-shadow:0 4px 16px rgba(16,24,40,.12); color:var(--doc-ed-ink,#1f2937);
   font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
+}
+/* 편집·검토 중에는 위쪽에 붙은 한 줄이 된다. 도구 줄은 바로 아래에 놓여 앱 바와 겹치지 않는다. */
+body.doc-editing #doc-controls, body.doc-changes #doc-controls{
+  top:0; left:0; right:0; max-width:none; justify-content:flex-start;
+  padding:6px 14px; border-width:0 0 1px; border-radius:0; box-shadow:none;
 }
 .doc-ed-btn{
   font-family:inherit; font-weight:700; font-size:12.5px; line-height:1.3; cursor:pointer;
@@ -30,12 +39,40 @@
 .doc-ed-btn.ghost{ background:var(--doc-ed-paper,#fff); box-shadow:none; }
 .doc-ed-btn.ghost.on{ background:var(--doc-ed-accent,#2563eb); color:#fff; border-color:var(--doc-ed-accent,#2563eb); }
 
-/* ---------- 편집 툴바 (편집 모드에서만) ---------- */
+/* 모드 전환: 보기·편집·검토 중 하나만 눌린 상태(aria-pressed). 저장(주 동작)과 색을 구분한다. */
+.doc-ed-modes{
+  display:inline-flex; flex:none; gap:2px; padding:2px; border-radius:10px;
+  background:var(--doc-ed-paper-2,#f1f5f9); border:1px solid var(--doc-ed-line,#e5e7eb);
+}
+.doc-ed-btn.doc-ed-mode{ background:transparent; border-color:transparent; box-shadow:none; color:var(--doc-ed-ink-2,#374151); padding:6px 12px; }
+.doc-ed-btn.doc-ed-mode:hover{ background:#e5e7eb; }
+.doc-ed-btn.doc-ed-mode[aria-pressed="true"]{ background:var(--doc-ed-ink,#1f2937); border-color:var(--doc-ed-ink,#1f2937); color:#fff; }
+
+/* 저장 상태: 문구가 상태를 말하고 점 색은 보조. 오류는 해결되거나 닫을 때까지 남는다. */
+.doc-ed-status{
+  display:inline-flex; align-items:center; gap:6px; flex:0 1 auto; min-width:0; max-width:280px; margin-right:auto;
+  padding:4px 10px; border-radius:999px; background:#f3f4f6; color:#374151;
+  font-size:12px; font-weight:700; line-height:1.4; white-space:nowrap;
+}
+#doc-saveStatusText{ min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.doc-ed-status-dot{ flex:none; width:8px; height:8px; border-radius:50%; background:#6b7280; }
+.doc-ed-status[data-state="dirty"]{ background:#fef3c7; color:#92400e; } .doc-ed-status[data-state="dirty"] .doc-ed-status-dot{ background:#d97706; }
+.doc-ed-status[data-state="saving"]{ background:#dbeafe; color:#1e40af; } .doc-ed-status[data-state="saving"] .doc-ed-status-dot{ background:#2563eb; }
+.doc-ed-status[data-state="saved"]{ background:#d1fae5; color:#065f46; } .doc-ed-status[data-state="saved"] .doc-ed-status-dot{ background:#059669; }
+.doc-ed-status[data-state="downloaded"]{ background:#e0e7ff; color:#3730a3; } .doc-ed-status[data-state="downloaded"] .doc-ed-status-dot{ background:#4f46e5; }
+.doc-ed-status[data-state="error"]{ background:#fee2e2; color:#991b1b; } .doc-ed-status[data-state="error"] .doc-ed-status-dot{ background:#dc2626; }
+#doc-saveStatusDismiss{
+  flex:none; min-width:24px; min-height:24px; margin:-3px -6px -3px 0; padding:0; border:0; border-radius:6px;
+  background:transparent; color:inherit; font:inherit; font-size:16px; line-height:1; cursor:pointer;
+}
+#doc-saveStatusDismiss:hover{ background:rgba(153,27,27,.12); }
+#doc-saveStatusDismiss[hidden]{ display:none; }
+
+/* ---------- 편집 툴바 (편집 모드에서만 · 앱 바 바로 아래) ---------- */
 #doc-editbar{
-  position:fixed; top:0; left:0; right:0; z-index:2147483000;
+  position:fixed; top:var(--doc-ed-controls-height,48px); left:0; right:0; z-index:2147483000;
   display:none; align-items:center; gap:5px; flex-wrap:wrap;
   background:var(--doc-ed-ink,#1f2937); color:#fff; padding:7px 14px;
-  padding-right:calc(var(--doc-ed-controls-width,380px) + 28px); /* 실제 컨트롤 폭만큼 확보 */
   box-shadow:0 4px 14px rgba(16,24,40,.22);
   font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
 }
@@ -63,16 +100,16 @@ body.doc-editing #doc-editbar{ display:flex; }
   display:inline-flex; align-items:center; gap:4px; background:rgba(255,255,255,.08);
   border:1px solid rgba(255,255,255,.18); border-radius:7px; padding:0 6px; height:30px;
 }
-.doc-ed-ecol label{ font-size:10.5px; color:#aeb6bf; font-weight:700; }
+.doc-ed-ecol label{ font-size:12px; color:#aeb6bf; font-weight:700; }
 .doc-ed-ecol input[type=color]{ width:22px; height:22px; border:none; background:none; padding:0; cursor:pointer; }
 .doc-ed-ecol input[type=color]::-webkit-color-swatch-wrapper{ padding:0; }
 .doc-ed-ecol input[type=color]::-webkit-color-swatch{ border:1px solid rgba(255,255,255,.4); border-radius:4px; }
-.doc-ed-ecol .mini{ background:rgba(255,255,255,.12); border:none; color:#cfd5db; border-radius:5px; height:22px; padding:0 6px; cursor:pointer; font-size:11px; }
+.doc-ed-ecol .mini{ background:rgba(255,255,255,.12); border:none; color:#cfd5db; border-radius:5px; height:22px; padding:0 6px; cursor:pointer; font-size:12px; }
 
 /* ---------- 속성 패널 (편집 모드 · 우측 플로팅) ---------- */
 #doc-inspector{
-  position:fixed; top:calc(var(--doc-ed-tools-bottom,48px) + 8px); right:14px; width:276px; z-index:2147483000;
-  max-height:calc(var(--doc-ed-visible-height,100vh) - var(--doc-ed-tools-bottom,48px) - 24px); overflow:auto; display:none;
+  position:fixed; top:calc(var(--doc-ed-chrome-bottom,96px) + 8px); right:14px; width:276px; z-index:2147483000;
+  max-height:calc(var(--doc-ed-visible-height,100vh) - var(--doc-ed-chrome-bottom,96px) - 24px); overflow:auto; display:none;
   font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
 }
 body.doc-editing #doc-inspector{ display:block; }
@@ -100,27 +137,26 @@ body.doc-editing #doc-inspector{ display:block; }
   background-size:8px 8px; background-position:0 0,4px 4px;
 }
 .doc-ed-ichips{ display:flex; flex-wrap:wrap; gap:5px; justify-content:flex-end; }
-.doc-ed-ichip{ font-size:11px; padding:2px 8px; border-radius:6px; background:var(--doc-ed-paper-2,#f8fafc); color:var(--doc-ed-muted,#6b7280); border:1px solid var(--doc-ed-hair,#eef0f2); font-weight:700; }
+.doc-ed-ichip{ font-size:12px; padding:2px 8px; border-radius:6px; background:var(--doc-ed-paper-2,#f8fafc); color:var(--doc-ed-muted,#6b7280); border:1px solid var(--doc-ed-hair,#eef0f2); font-weight:700; }
 .doc-ed-ichip.on{ background:var(--doc-ed-accent-soft,#eef2ff); color:var(--doc-ed-accent-deep,#1d4ed8); border-color:var(--doc-ed-accent-line,#c7d2fe); }
-.doc-ed-insp-hint{ font-size:11.5px; color:var(--doc-ed-muted,#6b7280); padding:9px 15px 13px; border-top:1px solid var(--doc-ed-hair,#eef0f2); line-height:1.55; }
+.doc-ed-insp-hint{ font-size:12px; color:var(--doc-ed-muted,#6b7280); padding:9px 15px 13px; border-top:1px solid var(--doc-ed-hair,#eef0f2); line-height:1.55; }
 
 /* ---------- 메모 패널 (보기·편집 모두 · 우측 플로팅 · 인스펙터와 같은 자리) ---------- */
-.doc-ed-count{ display:inline-block; min-width:18px; margin-left:6px; padding:0 5px; border-radius:9px; background:var(--doc-ed-accent,#2563eb); color:#fff; font-size:11px; line-height:18px; text-align:center; }
+.doc-ed-count{ display:inline-block; min-width:18px; margin-left:6px; padding:0 5px; border-radius:9px; background:var(--doc-ed-accent,#2563eb); color:#fff; font-size:12px; line-height:18px; text-align:center; }
 .doc-ed-count:empty{ display:none; }
 .doc-ed-btn.on .doc-ed-count{ background:#fff; color:var(--doc-ed-accent,#2563eb); }
 #doc-notes-panel{
-  position:fixed; top:calc(var(--doc-ed-tools-bottom,0px) + 8px); right:14px; width:320px; z-index:2147483000;
-  max-height:calc(var(--doc-ed-visible-height,100vh) - var(--doc-ed-tools-bottom,0px) - 24px); overflow:auto; display:none;
+  position:fixed; top:calc(var(--doc-ed-chrome-bottom,60px) + 8px); right:14px; width:320px; z-index:2147483000;
+  max-height:calc(var(--doc-ed-visible-height,100vh) - var(--doc-ed-chrome-bottom,60px) - 24px); overflow:auto; display:none;
   font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
 }
-body:not(.doc-editing) #doc-notes-panel{ top:calc(var(--doc-ed-tools-bottom,0px) + var(--doc-ed-controls-height,44px) + 24px); max-height:calc(var(--doc-ed-visible-height,100vh) - var(--doc-ed-tools-bottom,0px) - var(--doc-ed-controls-height,44px) - 40px); }
 body.doc-notes-open #doc-notes-panel{ display:block; }
 body.doc-notes-open #doc-inspector{ display:none; }
 #doc-notes-panel .doc-ed-insp-h .doc-ed-btn{ margin-left:auto; }
 .doc-ed-notes-author{ display:flex; align-items:center; gap:8px; padding:8px 15px; border-bottom:1px solid var(--doc-ed-hair,#eef0f2); font-size:12px; font-weight:600; color:var(--doc-ed-muted,#6b7280); }
 .doc-ed-notes-author input{ flex:1; min-width:0; height:30px; border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:7px; padding:0 8px; font:inherit; font-size:13px; color:var(--doc-ed-ink,#1f2937); background:#fff; }
 .doc-ed-notes-compose{ padding:10px 15px; border-bottom:1px solid var(--doc-ed-hair,#eef0f2); }
-#doc-notesTarget{ display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--doc-ed-muted,#6b7280); margin-bottom:6px; }
+#doc-notesTarget{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--doc-ed-muted,#6b7280); margin-bottom:6px; }
 #doc-notesTarget .k{ font-weight:700; flex:none; }
 #doc-notesTarget .q{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #doc-notesTarget.has .q{ color:var(--doc-ed-accent-deep,#1d4ed8); font-weight:700; }
@@ -133,19 +169,19 @@ body.doc-notes-open #doc-inspector{ display:none; }
 #doc-notesList{ padding:8px 10px 12px; }
 .doc-ed-note-card{ border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:10px; padding:9px 11px; margin-bottom:8px; background:#fff; cursor:pointer; }
 .doc-ed-note-card.active{ border-color:var(--doc-ed-accent,#2563eb); box-shadow:0 0 0 2px var(--doc-ed-accent-line,#c7d2fe); }
-.doc-ed-note-head{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:11.5px; color:var(--doc-ed-muted,#6b7280); }
+.doc-ed-note-head{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12px; color:var(--doc-ed-muted,#6b7280); }
 .doc-ed-note-head strong{ color:var(--doc-ed-ink,#1f2937); font-size:12.5px; }
-.doc-ed-note-badge{ font-size:10.5px; padding:1px 6px; border-radius:6px; background:var(--doc-ed-paper-2,#f8fafc); border:1px solid var(--doc-ed-hair,#eef0f2); color:var(--doc-ed-muted,#6b7280); font-weight:700; }
+.doc-ed-note-badge{ font-size:12px; padding:1px 6px; border-radius:6px; background:var(--doc-ed-paper-2,#f8fafc); border:1px solid var(--doc-ed-hair,#eef0f2); color:var(--doc-ed-muted,#6b7280); font-weight:700; }
 .doc-ed-note-badge.ok{ background:#ecfdf5; border-color:#a7f3d0; color:#047857; }
-.doc-ed-note-where{ font-size:11.5px; color:var(--doc-ed-muted,#6b7280); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.doc-ed-note-where{ font-size:12px; color:var(--doc-ed-muted,#6b7280); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .doc-ed-note-text{ font-size:13px; line-height:1.55; color:var(--doc-ed-ink,#1f2937); margin-top:6px; white-space:pre-wrap; overflow-wrap:anywhere; }
 .doc-ed-note-replies{ margin-top:8px; padding-left:10px; border-left:2px solid var(--doc-ed-hair,#eef0f2); }
 .doc-ed-note-reply{ font-size:12.5px; margin-top:6px; color:var(--doc-ed-ink,#1f2937); }
 .doc-ed-note-reply strong{ font-size:12px; margin-right:6px; }
-.doc-ed-note-reply span{ font-size:11px; color:var(--doc-ed-muted,#6b7280); }
+.doc-ed-note-reply span{ font-size:12px; color:var(--doc-ed-muted,#6b7280); }
 .doc-ed-note-reply div{ white-space:pre-wrap; overflow-wrap:anywhere; }
 .doc-ed-note-actions{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
-.doc-ed-note-actions .doc-ed-btn{ padding:4px 9px; font-size:11.5px; box-shadow:none; }
+.doc-ed-note-actions .doc-ed-btn{ padding:4px 9px; font-size:12px; box-shadow:none; }
 .doc-ed-note-replybox{ margin-top:8px; }
 .doc-ed-note-replybox textarea{ display:block; width:100%; border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:8px; padding:6px 8px; font:inherit; font-size:12.5px; margin-bottom:6px; background:#fff; color:var(--doc-ed-ink,#1f2937); }
 .doc-ed-note-card.resolved{ opacity:.78; }
@@ -160,16 +196,15 @@ body.doc-editing #doc-content .doc-ed-block-target{ outline:2px solid #ef4444; o
 
 /* ---------- 변경 사항 바 (비교 모드에서만 · 편집 툴바 자리) ---------- */
 #doc-changes-bar{
-  position:fixed; top:0; left:0; right:0; z-index:2147483000;
+  position:fixed; top:var(--doc-ed-controls-height,48px); left:0; right:0; z-index:2147483000;
   display:none; align-items:center; gap:8px; flex-wrap:wrap;
   background:var(--doc-ed-ink,#1f2937); color:#fff; padding:7px 14px;
-  padding-right:calc(var(--doc-ed-controls-width,380px) + 28px);
   box-shadow:0 4px 14px rgba(16,24,40,.22);
   font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans-serif;
 }
 body.doc-changes #doc-changes-bar{ display:flex; }
 #doc-changes-bar .doc-ed-g{ display:flex; align-items:center; gap:4px; }
-#doc-changes-bar .doc-ed-cb-label{ font-size:11px; font-weight:700; color:#aeb6bf; }
+#doc-changes-bar .doc-ed-cb-label{ font-size:12px; font-weight:700; color:#aeb6bf; }
 #doc-changes-bar .doc-ed-esel{ max-width:320px; }
 #doc-changes-bar .doc-ed-cb-summary{ font-size:12.5px; font-weight:700; }
 #doc-changes-bar .doc-ed-eb:disabled{ opacity:.45; cursor:default; }
@@ -181,7 +216,7 @@ body.doc-changes #doc-content [data-doc-change]{ cursor:pointer; }
 #doc-content .doc-ed-diff-del{ background:rgba(239,68,68,.10); box-shadow:-4px 0 0 #ef4444; text-decoration:line-through; text-decoration-color:rgba(239,68,68,.7); }
 #doc-content .doc-ed-diff-mod{ box-shadow:-4px 0 0 #3b82f6; }
 #doc-content .doc-ed-diff-fmt{ outline:1px dashed #8b5cf6; outline-offset:2px; }
-#doc-content .doc-ed-diff-fmt::before{ content:'서식 변경'; display:inline-block; font-size:10px; line-height:1.4; font-weight:700; padding:0 5px; margin-right:6px; border-radius:4px; background:#ede9fe; color:#5b21b6; vertical-align:middle; letter-spacing:0; text-decoration:none; }
+#doc-content .doc-ed-diff-fmt::before{ content:'서식 변경'; display:inline-block; font-size:12px; line-height:1.4; font-weight:700; padding:0 5px; margin-right:6px; border-radius:4px; background:#ede9fe; color:#5b21b6; vertical-align:middle; letter-spacing:0; text-decoration:none; }
 #doc-content ins.doc-ed-ins{ background:rgba(34,197,94,.25); text-decoration:underline; text-decoration-color:#16a34a; color:inherit; }
 #doc-content del.doc-ed-del{ background:rgba(239,68,68,.18); text-decoration:line-through; text-decoration-color:#ef4444; color:inherit; }
 #doc-content .doc-ed-diff-run{ display:inline; box-shadow:none; }
@@ -213,7 +248,7 @@ body.doc-editing #doc-editflag{
 
 /* ---------- 배너 / 토스트 / 모달 ---------- */
 #doc-restore-banner{
-  position:fixed; left:50%; top:14px; transform:translateX(-50%); z-index:2147483002; display:none;
+  position:fixed; left:50%; top:calc(var(--doc-ed-chrome-bottom,56px) + 8px); transform:translateX(-50%); z-index:2147483002; display:none;
   background:#fff; border:1px solid var(--doc-ed-line,#e5e7eb); box-shadow:0 8px 24px rgba(16,24,40,.16);
   border-radius:10px; padding:11px 14px; align-items:center; gap:10px; flex-wrap:wrap;
   box-sizing:border-box; width:max-content; max-width:calc(100vw - 28px);
@@ -242,49 +277,58 @@ body.doc-editing #doc-editflag{
 .doc-ed-hist-item{ display:flex; flex-direction:column; gap:2px; width:100%; text-align:left; border:1px solid var(--doc-ed-line,#e5e7eb); background:#fff; border-radius:8px; padding:9px 11px; margin-bottom:7px; cursor:pointer; font-family:inherit; }
 .doc-ed-hist-item:hover{ background:var(--doc-ed-paper-2,#f8fafc); }
 .doc-ed-hist-item strong{ font-size:13px; font-weight:700; color:var(--doc-ed-ink,#1f2937); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.doc-ed-hist-item span{ font-size:11px; color:var(--doc-ed-muted,#6b7280); }
+.doc-ed-hist-item span{ font-size:12px; color:var(--doc-ed-muted,#6b7280); }
 #doc-hist-preview{ flex:1; overflow:auto; padding:16px 18px; background:var(--doc-ed-paper-2,#f8fafc); }
 .doc-ed-hist-actions{ display:flex; justify-content:flex-end; margin-bottom:12px; }
 .doc-ed-hist-doc{ background:#fff; border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:8px; padding:18px 20px; zoom:.8; }
 .doc-ed-muted{ color:var(--doc-ed-muted,#6b7280); }
 
 
-/* ---------- 컨트롤 메뉴 / 접근성 ---------- */
-#doc-more-actions{ display:flex; gap:6px; }
+/* ---------- 파일 작업 메뉴 (⋯) / 접근성 ---------- */
+#doc-more-actions{
+  display:none; position:absolute; top:calc(100% + 6px); right:8px; z-index:1; min-width:200px;
+  flex-direction:column; gap:2px; padding:6px; border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:12px;
+  background:var(--doc-ed-paper,#fff); box-shadow:0 8px 24px rgba(16,24,40,.18);
+  max-height:calc(var(--doc-ed-visible-height,100vh) - var(--doc-ed-chrome-bottom,60px) - 20px); overflow-y:auto;
+}
+#doc-controls.doc-more-open #doc-more-actions{ display:flex; }
+#doc-more-actions .doc-ed-btn{ width:100%; text-align:left; border-color:transparent; }
+#doc-more-actions .doc-ed-btn:hover, #doc-more-actions .doc-ed-btn:focus{ background:#f2f4f7; }
+#doc-more-actions .doc-ed-btn:disabled{ color:var(--doc-ed-muted,#6b7280); cursor:default; }
+#doc-moreToggle{ min-width:36px; font-size:16px; letter-spacing:1px; }
 #doc-attachFile{ display:none!important; }
-#doc-moreToggle, #doc-inspectorToggle, #doc-inspectorClose{ display:none; }
+#doc-inspectorToggle, #doc-inspectorClose{ display:none; }
 #doc-controls *, #doc-editbar *, #doc-inspector *, #doc-notes-panel *, #doc-changes-bar *, #doc-history-modal *{ box-sizing:border-box; }
 #doc-controls, #doc-editbar, #doc-inspector, #doc-notes-panel, #doc-changes-bar, #doc-history-modal{ box-sizing:border-box; }
-#doc-controls button, #doc-editbar button, #doc-inspectorClose{ touch-action:manipulation; }
-#doc-controls button:focus-visible, #doc-editbar :is(button,select,input):focus-visible,
-#doc-inspectorClose:focus-visible, #doc-notes-panel :is(button,input,textarea):focus-visible{ outline:2px solid var(--doc-ed-accent,#2563eb); outline-offset:2px; }
+#doc-controls button, #doc-editbar button, #doc-changes-bar button, #doc-inspectorClose{ touch-action:manipulation; }
+/* 밝은 바탕은 강조색, 어두운 툴바·토스트 위에서는 3:1 이상 대비가 나는 밝은 파랑으로 초점을 그린다. */
+#doc-controls button:focus-visible, #doc-inspectorClose:focus-visible, #doc-notes-panel :is(button,input,textarea):focus-visible,
+#doc-history-modal button:focus-visible, #doc-restore-banner button:focus-visible{ outline:2px solid var(--doc-ed-accent,#2563eb); outline-offset:2px; }
+#doc-editbar :is(button,select,input):focus-visible, #doc-changes-bar :is(button,select):focus-visible,
+#doc-toast button:focus-visible{ outline:2px solid #93c5fd; outline-offset:2px; }
+#doc-more-actions .doc-ed-btn:focus-visible{ outline-offset:-2px; }
 #doc-content{ scroll-margin-top:calc(var(--doc-ed-tools-bottom,0px) + 16px); }
 body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-top:calc(var(--doc-ed-tools-bottom,0px) + 16px); }
 .doc-ed-modal-body, #doc-hist-preview{ min-width:0; }
 
-/* ---------- 모바일·태블릿: 고정된 두 줄과 접이식 패널 ---------- */
+/* ---------- 모바일·태블릿: 위쪽에 붙은 앱 바와 도구 줄, 접이식 패널 ---------- */
 @media(max-width:900px){
-  #doc-controls{
-    top:0; left:0; right:0; gap:6px; flex-wrap:nowrap; justify-content:flex-end;
+  #doc-controls, body.doc-editing #doc-controls, body.doc-changes #doc-controls{
+    top:0; left:0; right:0; max-width:none; gap:6px; flex-wrap:nowrap; justify-content:flex-start;
     padding:8px max(8px,env(safe-area-inset-right)) 8px max(8px,env(safe-area-inset-left));
     padding-top:max(8px,env(safe-area-inset-top));
-    background:var(--doc-ed-paper,#fff); border-bottom:1px solid var(--doc-ed-line,#e5e7eb);
-    box-shadow:0 2px 8px rgba(16,24,40,.08);
+    border-width:0 0 1px; border-radius:0; box-shadow:0 2px 8px rgba(16,24,40,.08);
   }
-  #doc-controls > .doc-ed-btn{ min-height:44px; padding:8px 10px; white-space:nowrap; }
-  #doc-editToggle{ margin-right:auto; }
-  #doc-moreToggle{ display:block; }
+  #doc-controls .doc-ed-btn{ min-height:44px; padding:8px 10px; white-space:nowrap; }
+  .doc-ed-modes{ padding:0; border:0; gap:2px; background:transparent; }
+  .doc-ed-btn.doc-ed-mode{ min-width:44px; padding:8px; border-color:var(--doc-ed-line,#e5e7eb); background:var(--doc-ed-paper-2,#f1f5f9); }
+  .doc-ed-status{ flex:1 1 auto; max-width:none; }
+  #doc-saveStatusDismiss{ min-width:44px; min-height:44px; margin:-12px -10px -12px 0; }
+  #doc-moreToggle{ min-width:44px; font-size:18px; }
   body.doc-editing #doc-inspectorToggle{ display:block; }
-  #doc-more-actions{
-    display:none; position:absolute; top:calc(100% + 6px); right:8px; width:180px;
-    padding:6px; border:1px solid var(--doc-ed-line,#e5e7eb); border-radius:12px;
-    background:var(--doc-ed-paper,#fff); box-shadow:0 8px 24px rgba(16,24,40,.18);
-    max-height:calc(var(--doc-ed-visible-height,100dvh) - var(--doc-ed-controls-height,60px) - 20px); overflow-y:auto;
-  }
-  #doc-controls.doc-more-open #doc-more-actions{ display:flex; flex-direction:column; }
-  #doc-more-actions .doc-ed-btn{ min-height:44px; text-align:left; }
+  #doc-more-actions .doc-ed-btn{ min-height:44px; }
   #doc-editbar{
-    top:var(--doc-ed-controls-height,60px); padding:6px 8px;
+    padding:6px 8px;
     flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; gap:6px;
     overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; scrollbar-width:thin;
   }
@@ -294,7 +338,7 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   #doc-editbar .doc-ed-ecol{ height:44px; }
   #doc-editbar .doc-ed-ecol input[type=color]{ width:36px; height:36px; }
   #doc-editbar .doc-ed-ecol .mini{ min-height:36px; padding:0 10px; }
-  #doc-changes-bar{ top:var(--doc-ed-controls-height,60px); padding:6px 8px; flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; gap:6px; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; scrollbar-width:thin; }
+  #doc-changes-bar{ padding:6px 8px; flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; gap:6px; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; scrollbar-width:thin; }
   #doc-changes-bar > *{ flex:0 0 auto; }
   #doc-changes-bar .doc-ed-esel{ height:44px; font-size:16px; max-width:200px; }
   #doc-changes-bar .doc-ed-eb{ height:44px; min-width:44px; }
@@ -303,7 +347,6 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   body.doc-editing.doc-inspector-open #doc-inspector{ display:block; }
   #doc-inspector{ left:8px; right:8px; width:auto; }
   #doc-notes-panel{ left:8px; right:8px; width:auto; }
-  body:not(.doc-editing) #doc-notes-panel{ top:calc(var(--doc-ed-tools-bottom,60px) + 8px); max-height:calc(var(--doc-ed-visible-height,100dvh) - var(--doc-ed-tools-bottom,60px) - 24px); }
   body.doc-editing #doc-notesBtn{ display:none; }
   #doc-notesClose{ min-height:44px; }
   #doc-notes-panel .doc-ed-insp-h{ padding:6px 12px; }
@@ -311,10 +354,10 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   #doc-inspectorClose{ display:block; margin-left:auto; min-height:44px; }
   #doc-inspector .doc-ed-insp-h{ padding:6px 12px; }
   body.doc-editing #doc-editflag{ display:none; }
-  #doc-restore-banner{ top:calc(var(--doc-ed-controls-height,60px) + 8px); max-height:calc(var(--doc-ed-visible-height,100dvh) - var(--doc-ed-controls-height,60px) - 24px); overflow-y:auto; }
+  #doc-restore-banner{ max-height:calc(var(--doc-ed-visible-height,100dvh) - var(--doc-ed-chrome-bottom,60px) - 24px); overflow-y:auto; }
   #doc-restore-banner .doc-ed-btn{ min-height:44px; }
   #doc-toast{ bottom:16px; max-width:calc(100vw - 24px); box-sizing:border-box; }
-  .doc-ed-toast-act{ min-height:36px; padding:0 12px; }
+  .doc-ed-toast-act{ min-height:44px; padding:0 12px; }
   .doc-ed-modal.open{ padding:10px; }
   .doc-ed-modal-card{ width:100%; max-height:calc(var(--doc-ed-visible-height,100dvh) - 20px); }
   .doc-ed-modal-head .doc-ed-btn{ min-height:44px; }
@@ -322,6 +365,14 @@ body.doc-editing #doc-content :is(p,li,h1,h2,h3,h4,h5,h6,td,th){ scroll-margin-t
   #doc-hist-list{ flex:0 0 auto; max-height:28vh; max-height:28dvh; border-right:0; border-bottom:1px solid var(--doc-ed-line,#e5e7eb); }
   #doc-hist-preview{ flex:0 0 auto; padding:12px; }
   .doc-ed-hist-doc{ padding:12px; overflow:auto; }
+}
+
+/* 아주 좁은 화면: 첫 줄은 모드와 동작, 둘째 줄은 저장 상태 */
+@media(max-width:560px){
+  #doc-controls, body.doc-editing #doc-controls, body.doc-changes #doc-controls{ flex-wrap:wrap; gap:4px; row-gap:4px; padding-left:max(6px,env(safe-area-inset-left)); padding-right:max(6px,env(safe-area-inset-right)); padding-bottom:6px; }
+  .doc-ed-modes{ margin-right:auto; }
+  .doc-ed-wide{ display:none; }
+  .doc-ed-status{ order:10; flex:1 0 100%; margin-right:0; padding:2px 10px; border-radius:8px; }
 }
 
 /* ---------- 인쇄: 크롬 전부 숨김 ---------- */

@@ -14,7 +14,7 @@ attach_js = (assets / 'doc-attach.js').read_text(encoding='utf-8')
 diff_js = (assets / 'doc-diff.js').read_text(encoding='utf-8')
 js = attach_js + '\n' + diff_js + '\n' + (assets / 'doc-editor.js').read_text(encoding='utf-8')
 skeleton = (assets / 'skeleton-src.html').read_text(encoding='utf-8')
-start = skeleton.index('<div id="doc-controls">')
+start = skeleton.index('<div id="doc-controls"')
 end = skeleton.index('</div>', skeleton.index('<div id="doc-toast"')) + len('</div>')
 chrome = skeleton[start:end]
 

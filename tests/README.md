@@ -17,7 +17,7 @@ Open `examples/demo.html` in your browser. Use a test copy when changing content
 3. Make an unsaved change and reload. Test restore, temporary ignore, and replacing the backup with current content. Reload again after confirming the backup.
 4. Export read-only HTML. Reopen it and confirm the editor and history are gone while content and design remain.
 5. In `tools/add-editor.html`, attach the editor to the exported file. Check editing and export again. Selecting an already-editable file should report an error.
-6. Check narrow viewports, toolbar scrolling, the more menu, and inspector. Native mobile keyboard and OS file-picker testing must be performed separately.
+6. Check narrow viewports, toolbar scrolling, the ⋯ menu, the save status row, and inspector. Native mobile keyboard and OS file-picker testing must be performed separately.
 
 Never run destructive backup fixtures on a document you use for real work.
 
@@ -49,9 +49,9 @@ for name in ['browser-regression', 'persistent-save', 'mobile-layout',
 
 Run them sequentially: the tests change test-origin backups and IndexedDB. If the port is occupied, select another dedicated port and update all test URLs. No private reports or external QA aliases are required.
 
-Coverage: restoration and history (16 checks), file-handle persistence (5), responsive layout and formatting (94), read-only export on the bundled skeleton/demo (18), attachment and encoding (37), review tools (52).
+Coverage: restoration and history (16 checks), file-handle persistence (5), responsive layout, formatting and narrow app bar (102), read-only export on the bundled skeleton/demo (18), attachment and encoding (41), review tools and app bar (74).
 
-`review-notes.js` covers the diff engine, author prompt, provenance, backup safety, notes (API and panel), comparison mode (API and bar), and narrow layouts. Stub `window.prompt` in any new browser test that saves or adds notes. Pure diff functions also have Node tests:
+`review-notes.js` covers the diff engine, author prompt, provenance, backup safety, notes (API and panel), comparison mode (API and bar), narrow layouts, and the app bar (mode switch, save status, ⋯ menu keys, layered Escape). Stub `window.prompt` in any new browser test that saves or adds notes. Pure diff functions also have Node tests:
 
 ```sh
 node --test tests/unit/*.test.js

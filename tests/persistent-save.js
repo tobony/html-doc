@@ -39,7 +39,7 @@ check('permission denial neither writes nor downloads',await page.evaluate(async
  return asks===1 && downloads===0 && await(await h.getFile()).text()===before && document.getElementById('doc-toast').textContent.includes('허용되지');
 },names[0]));
 await page.evaluate(async name=>{window.prompt=()=>'QA';const root=await navigator.storage.getDirectory();const h=await root.getFileHandle(name,{create:true});window.__qaPickerCalls=0;window.showSaveFilePicker=async()=>{window.__qaPickerCalls++;return h;};},names[1]);
-await page.locator('#doc-saveAsBtn').click();console.log((await snapshot(page,{interactive:true})).diff);
+await page.locator('#doc-moreToggle').click();await page.locator('#doc-saveAsBtn').click();console.log((await snapshot(page,{interactive:true})).diff);
 check('save as selects new file but preserves original path binding',await page.evaluate(async names=>{
  const root=await navigator.storage.getDirectory(),copy=await root.getFileHandle(names[1]);
  // Await the UI completion, without a timing assumption about disk/IDB latency.

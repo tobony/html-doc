@@ -2,8 +2,8 @@
    doc-editor: 임의 HTML 문서에 얹는 편집 엔진
    (html-doc 스킬 · 문서에 그대로 인라인. 수정·요약 금지)
 
-   제공: 보기↔편집 토글(⌘/Ctrl+E), 서식 툴바, "현재 서식" 속성 패널,
-         같은 파일 저장(⌘/Ctrl+S · File System Access), 히스토리, 자동저장.
+   제공: 보기·편집·검토 모드 앱 바(⌘/Ctrl+E), 서식 툴바, "현재 서식" 속성 패널,
+         같은 파일 저장(⌘/Ctrl+S · File System Access)과 저장 상태 표시, 히스토리, 자동저장.
    계약: 편집 대상은 #doc-content 안의 내용. 크롬 마크업(고정 id)과
          <script id="doc-history"> 가 문서에 존재해야 함.
    ============================================================ */
@@ -117,15 +117,51 @@
   /* ---------- 자동저장 ---------- */
   function genId(){ return 'doc-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8); }
   function autosaveKey(){ var id=body.dataset.docId; return 'docedit:autosave:'+(id||('url:'+location.origin+location.pathname)); }
-  function scheduleAutosave(){ clearTimeout(autosaveTimer); autosaveTimer=setTimeout(doAutosave,700); }
+  function scheduleAutosave(){ markDirty(); clearTimeout(autosaveTimer); autosaveTimer=setTimeout(doAutosave,700); }
   function writeBackup(){
-    try{ var html=getContentHtml(); localStorage.setItem(autosaveKey(), JSON.stringify({ts:new Date().toISOString(),html:html,notes:notes,title:snapshotTitle(html),savedBy:body.dataset.docSavedBy||'',savedAt:body.dataset.docSavedAt||''})); lastBackedUpHtml=html; lastBackedUpNotes=JSON.stringify(notes); return true; }
-    catch(e){ toast('브라우저 백업을 저장하지 못했습니다. 파일로 저장해 주세요.'); return false; }
+    try{ var html=getContentHtml(); localStorage.setItem(autosaveKey(), JSON.stringify({ts:new Date().toISOString(),html:html,notes:notes,title:snapshotTitle(html),savedBy:body.dataset.docSavedBy||'',savedAt:body.dataset.docSavedAt||''})); lastBackedUpHtml=html; lastBackedUpNotes=JSON.stringify(notes); setBackupFailed(false); return true; }
+    catch(e){ setBackupFailed(true); toast('브라우저 백업을 저장하지 못했습니다. 파일로 저장해 주세요.'); return false; }
   }
-  function doAutosave(){ clearTimeout(autosaveTimer); autosaveTimer=null; if(getContentHtml()!==lastBackedUpHtml || JSON.stringify(notes)!==lastBackedUpNotes) return writeBackup(); return true; }
+  function doAutosave(){ clearTimeout(autosaveTimer); autosaveTimer=null; var ok=true; if(getContentHtml()!==lastBackedUpHtml || JSON.stringify(notes)!==lastBackedUpNotes) ok=writeBackup(); refreshSaveState(); return ok; }
   // 디바운스 중 문서를 닫아도 마지막 입력을 보존한다.
   window.addEventListener('pagehide', function(){ if(autosaveTimer!==null) doAutosave(); });
   document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='hidden' && autosaveTimer!==null) doAutosave(); });
+
+  /* ---------- 저장 상태 (앱 바에 늘 표시) ---------- */
+  // clean: 연 뒤(또는 저장 뒤) 바뀐 것 없음 · dirty: 파일에 반영하지 않은 본문·메모 변경 · saving · saved: 파일에 씀
+  // downloaded: 브라우저 다운로드로 사본을 내려받음(원본 파일 덮어쓰기가 아님) · error: 저장 실패.
+  // 오류는 다음 저장이 성공하거나 사용자가 닫을 때까지 남긴다.
+  var CLEAN_TIP='마지막 저장 이후 바뀐 내용이 없습니다';
+  var lastSavedNotes=JSON.stringify(notes), saveState={kind:'clean'}, settledState={kind:'clean'}, backupFailed=false;
+  function isDirty(){ return getContentHtml()!==lastSavedHtml || JSON.stringify(notes)!==lastSavedNotes; }
+  function clockTime(){ try{ return new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
+  function renderSaveState(){
+    var box=$('doc-saveStatus'), text=$('doc-saveStatusText'), x=$('doc-saveStatusDismiss'), sb=$('doc-saveBtn'), s=saveState, label, tip;
+    if(s.kind==='dirty'){ label=backupFailed?'저장 안 됨 · 백업 실패':'저장 안 됨'; tip=backupFailed?'브라우저 백업도 저장하지 못했습니다. 파일로 저장해 주세요.':'파일에 아직 저장하지 않은 변경이 있습니다. 이 브라우저에는 자동 백업이 남습니다.'; }
+    else if(s.kind==='saving'){ label='저장 중…'; tip='파일에 저장하는 중입니다.'; }
+    else if(s.kind==='saved'){ label='저장됨'+(s.time?' · '+s.time:''); tip=s.name+' 파일에 저장했습니다.'+(s.remembered?'':' 파일 연결을 기억하지 못해 다음 저장 때 다시 선택해야 합니다.'); }
+    else if(s.kind==='downloaded'){ label=s.fallback?'파일 저장 실패 · 사본 다운로드':'사본 다운로드함'; tip=(s.fallback?'파일에 직접 쓰지 못해':'이 브라우저는 파일에 직접 쓸 수 없어')+' 브라우저 다운로드로 사본을 내려받았습니다. 편집기가 원본 파일을 덮어쓴 것은 아닙니다. 다운로드한 파일을 확인해 주세요.'; }
+    else if(s.kind==='error'){ label='저장 실패'+({permission:' · 쓰기 권한 없음',notfound:' · 파일을 찾지 못함',check:' · 권한 확인 실패'}[s.reason]||''); tip=s.message||'저장하지 못했습니다. 다시 시도해 주세요.'; }
+    else { label='변경 없음'; tip=CLEAN_TIP; }
+    if(box){ box.setAttribute('data-state',s.kind); box.title=tip; }
+    if(text && text.textContent!==label) text.textContent=label;   // 같은 문구를 다시 쓰지 않아 화면 낭독기가 반복해 읽지 않는다
+    if(x) x.hidden=s.kind!=='error';
+    if(sb){ if(s.kind==='saving') sb.setAttribute('aria-busy','true'); else sb.removeAttribute('aria-busy'); }
+  }
+  function setSaveState(s){ saveState=s; if(s.kind==='clean'||s.kind==='saved'||s.kind==='downloaded') settledState=s; renderSaveState(); }
+  function settleSaveState(){ setSaveState(isDirty()?{kind:'dirty'}:settledState); }
+  // 입력마다 본문을 직렬화하지 않도록 우선 '저장 안 됨'으로 표시하고, 자동저장 시점에 실제 차이를 다시 판단한다.
+  function markDirty(){ if(saveState.kind!=='dirty' && saveState.kind!=='error' && saveState.kind!=='saving') setSaveState({kind:'dirty'}); }
+  function refreshSaveState(){ if(saveState.kind!=='error' && saveState.kind!=='saving') settleSaveState(); }
+  function dismissSaveError(){ if(saveState.kind==='error') settleSaveState(); }
+  // 떠날 때 확인 창은 띄우지 않는다. 자동저장이 브라우저에 백업을 남기기 때문이다.
+  // 백업마저 실패한 상태에서 저장하지 않은 변경이 있을 때만 브라우저 기본 확인 창을 요청한다.
+  function guardUnload(e){ if(autosaveTimer!==null) doAutosave(); if(backupFailed && isDirty()){ e.preventDefault(); e.returnValue=''; } }
+  function setBackupFailed(on){
+    if(backupFailed===on) return; backupFailed=on;
+    if(on) window.addEventListener('beforeunload',guardUnload); else window.removeEventListener('beforeunload',guardUnload);
+    renderSaveState();
+  }
 
   /* ---------- 메모 (저장소 #doc-notes + 본문 mark 앵커) ---------- */
   var noteTarget=null, locateTimer=null;
@@ -329,8 +365,7 @@
       content.innerHTML=pristineHtml; comparing=false; pristineHtml=null; cmp=null; changeIndex=-1; baseline=null; body.classList.remove('doc-changes');
       reconcileNotes(); savedRange=null; if(!editing) restoreBasePadding();
     }
-    var b=$('doc-changesBtn'); if(b) b.classList.toggle('on',on);
-    showTarget(); updateEditorLayout();
+    syncModes(); showTarget(); updateEditorLayout();
   }
   function fillBaseOptions(){
     var sel=$('doc-changesBase'), c, i, o; if(!sel) return; sel.innerHTML='';
@@ -467,8 +502,7 @@
     applyEditDisplay(on);
     content.setAttribute('contenteditable', on?'true':'false');
     body.classList.toggle('doc-editing', on);
-    var t=$('doc-editToggle');
-    if(t){ t.classList.toggle('on', on); t.textContent=on?'✎ 편집 중':'✎ 편집'; }
+    syncModes();
     try{ document.execCommand('styleWithCSS',false,true); }catch(e){}
     setMore(false);
     if(on) updateInspector();
@@ -476,35 +510,68 @@
     updateEditorLayout();
   }
 
-  /* ---------- 좁은 화면의 편집 UI ---------- */
-  function setMore(on){
-    var controls=$('doc-controls'), toggle=$('doc-moreToggle');
+  // 보기·편집·검토는 서로 배타적이다. 눌린 모드 하나만 aria-pressed=true.
+  function currentMode(){ return editing?'edit':(comparing?'review':'view'); }
+  function syncModes(){
+    var mode=currentMode();
+    [['doc-viewBtn','view'],['doc-editToggle','edit'],['doc-changesBtn','review']].forEach(function(p){
+      var b=$(p[0]); if(!b) return; b.classList.toggle('on',p[1]===mode); b.setAttribute('aria-pressed',String(p[1]===mode));
+    });
+  }
+  function setMode(mode){
+    if(mode==='edit'){ if(!editing) setEdit(true); }
+    else if(mode==='review'){ if(!comparing) setCompare(true); }
+    else { if(editing) setEdit(false); if(comparing) setCompare(false); }
+  }
+
+  /* ---------- 포커스 되돌리기 ---------- */
+  function canFocus(el){ return !!(el && el.isConnected && !el.disabled && el.getClientRects().length); }
+  // 닫힌 패널·메뉴 안에 있던 포커스를 연 버튼으로 돌려준다. 그 버튼이 숨었으면 다음 후보, 없으면 편집 중일 때 본문.
+  function returnFocus(list){
+    for(var i=0;i<list.length;i++){ var el=typeof list[i]==='string'?$(list[i]):list[i]; if(canFocus(el)){ el.focus(); return; } }
+    if(editing) focusContent();
+  }
+
+  /* ---------- 파일 작업 메뉴 (⋯) ---------- */
+  function menuItems(){ var m=$('doc-more-actions'); return m?Array.prototype.filter.call(m.querySelectorAll('button'),function(b){ return !b.disabled && !b.hidden; }):[]; }
+  function moreOpen(){ var c=$('doc-controls'); return !!(c && c.classList.contains('doc-more-open')); }
+  function setMore(on,focusItem){
+    var controls=$('doc-controls'), toggle=$('doc-moreToggle'), menu=$('doc-more-actions'), hadFocus=!on && menu && menu.contains(document.activeElement);
     if(controls) controls.classList.toggle('doc-more-open',on);
     if(toggle) toggle.setAttribute('aria-expanded',String(on));
+    if(on && focusItem){ var items=menuItems(), it=items[focusItem==='last'?items.length-1:0]; if(it) it.focus(); }
+    // 숨겨진 메뉴 항목에 포커스가 남으면 키보드 위치를 잃는다.
+    if(hadFocus && toggle) toggle.focus();
   }
   function setInspector(on){
     body.classList.toggle('doc-inspector-open',on && editing);
     var toggle=$('doc-inspectorToggle'); if(toggle) toggle.setAttribute('aria-expanded',String(on && editing));
   }
+  // 앱 바는 좁은 화면과 편집·검토 중에는 위쪽에 붙고(docked), 데스크톱 보기 모드에서는 문서를 밀지 않고 떠 있다.
+  // --doc-ed-tools-bottom: 문서를 밀어낼 높이 · --doc-ed-chrome-bottom: 패널·배너가 시작할 크롬 아래 끝.
   function updateEditorLayout(){
-    var mobile=window.matchMedia('(max-width:900px)').matches;
+    var mobile=window.matchMedia('(max-width:900px)').matches, docked=mobile||editing||comparing;
     var controls=$('doc-controls'), bar=$('doc-editbar'), cbar=$('doc-changes-bar');
     var controlHeight=controls?controls.offsetHeight:60;
     body.style.setProperty('--doc-ed-controls-height',controlHeight+'px');
-    body.style.setProperty('--doc-ed-controls-width',(controls?controls.offsetWidth:380)+'px');
     var toolsHeight=editing?(bar?bar.offsetHeight:0):(comparing?(cbar?cbar.offsetHeight:0):0);
-    var bottom=(mobile?controlHeight:0)+toolsHeight;
+    var bottom=(docked?controlHeight:0)+toolsHeight;
     body.style.setProperty('--doc-ed-tools-bottom',bottom+'px');
+    body.style.setProperty('--doc-ed-chrome-bottom',(docked||!controls?bottom:Math.ceil(controls.getBoundingClientRect().bottom))+'px');
     body.style.setProperty('--doc-ed-visible-height',(window.visualViewport?window.visualViewport.height:window.innerHeight)+'px');
     if(editing||comparing) body.style.paddingTop=(originalPaddingPixels+bottom)+'px';
-    if(!mobile){setMore(false);setInspector(false);}
+    if(!mobile) setInspector(false);
   }
   function scheduleLayout(){
     if(layoutFrame!==null) return;
     layoutFrame=requestAnimationFrame(function(){layoutFrame=null;updateEditorLayout();});
   }
   bind('doc-moreToggle','click',function(){
-    setInspector(false); setMore(this.getAttribute('aria-expanded')!=='true');
+    var open=this.getAttribute('aria-expanded')!=='true';
+    setInspector(false); setMore(open,open?'first':null);
+  });
+  bind('doc-moreToggle','keydown',function(e){
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){ e.preventDefault(); setInspector(false); setMore(true,e.key==='ArrowDown'?'first':'last'); }
   });
   bind('doc-inspectorToggle','click',function(){
     setMore(false);setNotes(false);setInspector(this.getAttribute('aria-expanded')!=='true');
@@ -515,7 +582,21 @@
     if(content.contains(e.target))setInspector(false);
     if(content.contains(e.target) && window.matchMedia('(max-width:900px)').matches) setNotes(false);
   });
-  var moreActions=$('doc-more-actions');if(moreActions)moreActions.addEventListener('click',function(e){if(e.target.closest('button'))setMore(false);});
+  var moreActions=$('doc-more-actions');
+  if(moreActions){
+    // 항목을 고르면 메뉴를 닫고, 동작이 포커스를 다른 곳(히스토리 창 등)으로 옮기지 않았으면 ⋯ 버튼으로 돌려준다.
+    moreActions.addEventListener('click',function(e){
+      if(!e.target.closest('button')) return;
+      var a=document.activeElement, t=$('doc-moreToggle'); setMore(false);
+      if(t && (!a || a===body || a===document.documentElement || this.contains(a))) t.focus();
+    });
+    moreActions.addEventListener('keydown',function(e){
+      var items=menuItems(), i=items.indexOf(document.activeElement), k=e.key;
+      if(k==='ArrowDown'||k==='ArrowUp'){ e.preventDefault(); if(!items.length) return; i=k==='ArrowDown'?(i+1)%items.length:(i<=0?items.length-1:i-1); items[i].focus(); }
+      else if(k==='Home'||k==='End'){ e.preventDefault(); if(items.length) items[k==='Home'?0:items.length-1].focus(); }
+      else if(k==='Tab'){ e.preventDefault(); setMore(false); }
+    });
+  }
 
   /* ---------- 선택 / 명령 ---------- */
   function focusContent(){ content.focus({preventScroll:true}); if(savedRange){ var s=window.getSelection(); s.removeAllRanges(); s.addRange(savedRange); } }
@@ -600,7 +681,7 @@
     var clone=withPristine(function(){ return document.documentElement.cloneNode(true); });
     restoreCloneDisplay(clone);
     clone.querySelectorAll('[data-doc-editor-download]').forEach(function(el){el.remove();});
-    var b=clone.querySelector('body'); if(b){ b.classList.remove('doc-editing','doc-inspector-open','doc-notes-open','doc-changes'); b.style.paddingTop=originalPaddingTop; ['--doc-ed-controls-height','--doc-ed-controls-width','--doc-ed-tools-bottom','--doc-ed-visible-height'].forEach(function(name){b.style.removeProperty(name);}); }
+    var b=clone.querySelector('body'); if(b){ b.classList.remove('doc-editing','doc-inspector-open','doc-notes-open','doc-changes'); b.style.paddingTop=originalPaddingTop; ['--doc-ed-controls-height','--doc-ed-controls-width','--doc-ed-tools-bottom','--doc-ed-chrome-bottom','--doc-ed-visible-height'].forEach(function(name){b.style.removeProperty(name);}); }
     var c=clone.querySelector('#doc-content'); if(c) c.setAttribute('contenteditable','false');
     ['#doc-restore-banner','#doc-toast'].forEach(function(s){ var el=clone.querySelector(s); if(el) el.classList.remove('show'); });
     var m=clone.querySelector('#doc-history-modal'); if(m) m.classList.remove('open');
@@ -608,7 +689,12 @@
     var hp=clone.querySelector('#doc-hist-preview'); if(hp) hp.innerHTML='';
     var controls=clone.querySelector('#doc-controls');if(controls)controls.classList.remove('doc-more-open');
     ['#doc-moreToggle','#doc-inspectorToggle'].forEach(function(sel){var t=clone.querySelector(sel);if(t)t.setAttribute('aria-expanded','false');});
-    var et=clone.querySelector('#doc-editToggle'); if(et){ et.classList.remove('on'); et.textContent='✎ 편집'; }
+    // 저장본은 항상 보기 모드, '변경 없음' 상태로 열린다.
+    [['#doc-viewBtn',true],['#doc-editToggle',false],['#doc-changesBtn',false]].forEach(function(p){ var mb=clone.querySelector(p[0]); if(mb){ mb.classList.toggle('on',p[1]); mb.setAttribute('aria-pressed',String(p[1])); } });
+    var ss=clone.querySelector('#doc-saveStatus'); if(ss){ ss.setAttribute('data-state','clean'); ss.title=CLEAN_TIP; }
+    var st=clone.querySelector('#doc-saveStatusText'); if(st) st.textContent='변경 없음';
+    var sx=clone.querySelector('#doc-saveStatusDismiss'); if(sx) sx.hidden=true;
+    var sbt=clone.querySelector('#doc-saveBtn'); if(sbt) sbt.removeAttribute('aria-busy');
     var attach=clone.querySelector('#doc-attachBtn');if(attach)attach.disabled=false;
     clone.querySelectorAll('#doc-content .doc-ed-note-active').forEach(function(m){m.classList.remove('doc-ed-note-active');});
     clone.querySelectorAll('#doc-content .doc-ed-block-target').forEach(function(m){m.classList.remove('doc-ed-block-target'); if(!m.className) m.removeAttribute('class');});
@@ -619,7 +705,6 @@
     var na=clone.querySelector('#doc-notesAuthor'); if(na) na.removeAttribute('value');
     var nh=clone.querySelector('#doc-notesHint'); if(nh) nh.hidden=true;
     var nbt=clone.querySelector('#doc-notesBtn'); if(nbt){ nbt.setAttribute('aria-expanded','false'); nbt.classList.remove('on'); }
-    var cbt=clone.querySelector('#doc-changesBtn'); if(cbt) cbt.classList.remove('on');
     var rv=clone.querySelector('#doc-changesRevert'); if(rv) rv.disabled=true;
     return '<!DOCTYPE html>\n'+clone.outerHTML;
   }
@@ -648,7 +733,7 @@
     var b=clone.querySelector('body');
     if(b){
       b.classList.remove('doc-editing','doc-inspector-open','doc-notes-open','doc-changes');b.removeAttribute('data-doc-id');b.removeAttribute('data-doc-saved-by');b.removeAttribute('data-doc-saved-at');b.style.paddingTop=originalPaddingTop;
-      ['--doc-ed-controls-height','--doc-ed-controls-width','--doc-ed-tools-bottom','--doc-ed-visible-height'].forEach(function(name){b.style.removeProperty(name);});
+      ['--doc-ed-controls-height','--doc-ed-controls-width','--doc-ed-tools-bottom','--doc-ed-chrome-bottom','--doc-ed-visible-height'].forEach(function(name){b.style.removeProperty(name);});
     }
     var c=clone.querySelector('#doc-content');
     if(c){ c.removeAttribute('contenteditable'); c.querySelectorAll('.doc-ed-block-target').forEach(function(m){m.classList.remove('doc-ed-block-target'); if(!m.className) m.removeAttribute('class');}); var marks=c.querySelectorAll('mark.doc-ed-note'); for(var k=0;k<marks.length;k++) unwrapMark(marks[k]); }
@@ -684,6 +769,7 @@
   async function saveToFile(forceNew){
     if(saving) return;
     saving=true;
+    var prevState=saveState; setSaveState({kind:'saving'});
     var oldId=body.dataset.docId, oldHistory=history.slice(), oldSavedBy=body.dataset.docSavedBy, oldSavedAt=body.dataset.docSavedAt, changedId=false, wasPathKeyed=!body.dataset.docId;
     function rollback(){
       history=oldHistory;
@@ -691,21 +777,28 @@
       if(oldSavedBy===undefined) delete body.dataset.docSavedBy; else body.dataset.docSavedBy=oldSavedBy;
       if(oldSavedAt===undefined) delete body.dataset.docSavedAt; else body.dataset.docSavedAt=oldSavedAt;
     }
+    // 실패는 토스트가 사라진 뒤에도 앱 바에 남는다.
+    function fail(reason,message){ setSaveState({kind:'error',reason:reason,message:message}); toast(message,6000); }
     try{
-      if(editing) setEdit(false);
+      // 편집 모드는 유지한다. 직렬화가 사본에서 편집 흔적을 지우므로 저장본은 보기 모드로 열린다.
       await fileLinkReady;
       var handle=forceNew?null:fileHandle, pickerFailed=false;
       if(window.showSaveFilePicker){
         try{
           if(forceNew || !handle){ handle=await window.showSaveFilePicker({ suggestedName:suggestName(), types:[{description:'HTML 문서', accept:{'text/html':['.html','.htm']}}] }); }
-          else { var p=await handle.queryPermission({mode:'readwrite'}); if(p!=='granted' && (await handle.requestPermission({mode:'readwrite'}))!=='granted'){ toast('쓰기 권한이 허용되지 않아 저장하지 않았습니다. 다시 저장하거나 다른 이름으로 저장해 주세요.'); return; } }
-        }catch(e){ if(e&&e.name==='AbortError') return; if(handle){ toast('저장 파일의 쓰기 권한을 확인하지 못했습니다. 저장 버튼을 다시 눌러 주세요.'); return; } handle=null; pickerFailed=true; }
+          else { var p=await handle.queryPermission({mode:'readwrite'}); if(p!=='granted' && (await handle.requestPermission({mode:'readwrite'}))!=='granted'){ fail('permission','쓰기 권한이 허용되지 않아 저장하지 않았습니다. 다시 저장하거나 다른 이름으로 저장해 주세요.'); return; } }
+        }catch(e){
+          // 선택기를 취소하면 이전 상태로 돌아간다(남아 있던 오류도 그대로).
+          if(e&&e.name==='AbortError'){ if(prevState.kind==='error') setSaveState(prevState); else settleSaveState(); return; }
+          if(handle){ fail('check','저장 파일의 쓰기 권한을 확인하지 못했습니다. 저장 버튼을 다시 눌러 주세요.'); return; }
+          handle=null; pickerFailed=true;
+        }
       }
       // 이름은 파일 선택기가 끝난 뒤에 묻는다(선택기 앞의 prompt는 사용자 동작 유효 시간을 소모한다). 선택기를 취소하면 묻지 않는다.
       var author=ensureAuthor();
       // 첫 저장에서 문서 ID를 만들어 백업을 경로가 아닌 문서별로 구분한다. 다른 이름으로 저장하면 새 ID.
       if(forceNew || !body.dataset.docId){ body.dataset.docId=genId(); changedId=true; }
-      var savedHtml=getContentHtml();
+      var savedHtml=getContentHtml(), savedNotes=JSON.stringify(notes);
       pushHistoryIfChanged();
       body.dataset.docSavedBy=author; body.dataset.docSavedAt=new Date().toISOString();
       var output=serialize(), wroteFile=false;
@@ -717,7 +810,7 @@
             if(!forceNew && rememberAtThisLocation) await fileLinkStore('delete');
             updateSaveHint();
             rollback();
-            toast('연결한 파일을 찾지 못했습니다. 저장을 다시 누르면 파일을 선택할 수 있습니다.'); return;
+            fail('notfound','연결한 파일을 찾지 못했습니다. 저장을 다시 누르면 파일을 선택할 수 있습니다.'); return;
           }
           pickerFailed=true;
         }
@@ -728,16 +821,19 @@
       var remembered=true;
       if(wroteFile && rememberAtThisLocation) remembered=(await fileLinkStore('put',handle)).ok;
       updateSaveHint();
-      lastSavedHtml=savedHtml;
+      lastSavedHtml=savedHtml; lastSavedNotes=savedNotes;
       if(comparing) fillBaseOptions();
       // 일반 저장에서 경로 키가 ID 키로 바뀌었으면 새 키 백업에 성공한 뒤 경로 키 백업을 지운다. 다른 이름으로 저장할 때는 원래 경로의 백업을 건드리지 않는다.
       if(writeBackup() && wasPathKeyed && !forceNew){ try{ localStorage.removeItem('docedit:autosave:url:'+location.origin+location.pathname); }catch(e){} }
       var banner=$('doc-restore-banner'); if(banner) banner.classList.remove('show');
+      // 다운로드는 원본 파일을 덮어쓴 것이 아니므로 '저장됨'으로 표시하지 않는다. 저장하는 동안 더 고친 내용이 있으면 바로 '저장 안 됨'.
+      setSaveState(wroteFile?{kind:'saved',name:handle.name,time:clockTime(),remembered:remembered}:{kind:'downloaded',fallback:pickerFailed});
+      settleSaveState();
       toast(wroteFile?'저장되었습니다 · '+handle.name+(remembered?'':' · 파일 연결을 기억하지 못해 다음에 다시 선택해야 합니다.'):(pickerFailed?'파일 저장 실패. 다운로드를 시작했습니다.':'다운로드를 시작했습니다. 내려받은 파일을 확인해 주세요.'));
     }catch(e){
       rollback();
-      toast('저장하지 못했습니다. 다시 시도해 주세요.');
-    }finally{ saving=false; }
+      fail('failed','저장하지 못했습니다. 다시 시도해 주세요.');
+    }finally{ saving=false; if(saveState.kind==='saving') settleSaveState(); }
   }
 
   /* ---------- 히스토리 ---------- */
@@ -747,8 +843,14 @@
     if(!history.length){ list.innerHTML='<p class="doc-ed-muted" style="font-size:13px">저장 히스토리가 없습니다.<br>저장하면 직전 내용이 쌓입니다.</p>'; }
     history.forEach(function(h,i){ var b=document.createElement('button'); b.className='doc-ed-hist-item'; b.innerHTML='<strong>'+escapeHtml(h.title)+'</strong><span>'+escapeHtml(h.author||'이름 없음')+' · '+escapeHtml(fmtTs(h.ts))+'</span>'; b.onclick=function(){ previewHistory(i); }; list.appendChild(b); });
     var pv=$('doc-hist-preview'); if(pv) pv.innerHTML='<p class="doc-ed-muted" style="font-size:13px">왼쪽에서 버전을 선택하면 미리보기가 표시됩니다.</p>';
-    var m=$('doc-history-modal'); if(m) m.classList.add('open');
+    var m=$('doc-history-modal'); if(!m) return;
+    var a=document.activeElement, menu=$('doc-more-actions');
+    historyReturn=(menu && menu.contains(a))?$('doc-moreToggle'):a;
+    m.classList.add('open'); var c=$('doc-hist-close'); if(c) c.focus();
   }
+  var historyReturn=null;
+  function historyOpen(){ var m=$('doc-history-modal'); return !!(m && m.classList.contains('open')); }
+  function closeHistory(){ var m=$('doc-history-modal'); if(!historyOpen()) return; var inside=m.contains(document.activeElement); m.classList.remove('open'); if(inside||document.activeElement===body) returnFocus([historyReturn,'doc-moreToggle']); historyReturn=null; }
   function previewHistory(i){
     var h=history[i], pv=$('doc-hist-preview'); if(!pv) return; pv.innerHTML='';
     var bar=document.createElement('div'); bar.className='doc-ed-hist-actions';
@@ -760,7 +862,7 @@
     if(comparing) setCompare(false);
     var target=history[i].html, cur=getContentHtml();
     if(!(history[0] && history[0].html===cur)){ history.unshift({ts:body.dataset.docSavedAt||new Date().toISOString(), title:'복원 전: '+snapshotTitle(cur), html:cur, author:body.dataset.docSavedBy||''}); history=history.slice(0,30); }
-    content.innerHTML=target; savedRange=null; var m=$('doc-history-modal'); if(m) m.classList.remove('open'); afterContentReplaced(); scheduleAutosave();
+    content.innerHTML=target; savedRange=null; closeHistory(); afterContentReplaced(); scheduleAutosave();
     toast('해당 버전으로 복원했습니다. 파일에 반영하려면 [저장]을 누르세요.');
   }
 
@@ -785,7 +887,7 @@
         var cur=getContentHtml();
         if(!(history[0] && history[0].html===cur)){ history.unshift({ts:fileAt||new Date().toISOString(), title:'복구 전: '+snapshotTitle(cur), html:cur, author:fileBy}); history=history.slice(0,30); }
         content.innerHTML=a.html; if(Array.isArray(a.notes)) notes=sanitizeNotes(a.notes);
-        savedRange=null; lastBackedUpHtml=a.html; lastBackedUpNotes=JSON.stringify(notes); banner.classList.remove('show'); afterContentReplaced(); updateInspector();
+        savedRange=null; lastBackedUpHtml=a.html; lastBackedUpNotes=JSON.stringify(notes); banner.classList.remove('show'); afterContentReplaced(); updateInspector(); refreshSaveState();
         toast('자동저장본을 복구했습니다. 파일에 반영하려면 저장을 누르세요.');
       };
       var ig=$('doc-rb-ignore'); if(ig) ig.onclick=function(){ banner.classList.remove('show'); };
@@ -797,15 +899,17 @@
   }
 
   /* ---------- 버튼 / 단축키 ---------- */
+  bind('doc-viewBtn','click', function(){ setMode('view'); });
   bind('doc-editToggle','click', function(){ setEdit(!editing); });
+  bind('doc-saveStatusDismiss','click', function(){ dismissSaveError(); returnFocus(['doc-saveBtn']); });
   bind('doc-saveBtn','click', function(){ saveToFile(false); });
   bind('doc-saveAsBtn','click', function(){ saveToFile(true); });
   bind('doc-exportBtn','click',exportReadOnly);
   bind('doc-historyBtn','click', openHistory);
-  bind('doc-hist-close','click', function(){ var m=$('doc-history-modal'); if(m) m.classList.remove('open'); });
+  bind('doc-hist-close','click', closeHistory);
   bind('doc-printBtn','click', function(){ if(editing) setEdit(false); window.print(); });
   bind('doc-changesBtn','click',function(){ setCompare(!comparing); });
-  bind('doc-changesClose','click',function(){ setCompare(false); });
+  bind('doc-changesClose','click',function(){ setCompare(false); returnFocus(['doc-changesBtn']); });
   bind('doc-changesPrev','click',function(){ stepChange(-1); });
   bind('doc-changesNext','click',function(){ stepChange(1); });
   bind('doc-changesRevert','click',function(){ revertChange(); });
@@ -819,9 +923,37 @@
     try{ await loadBaselineFile(file); toast('파일과 비교합니다: '+file.name); }catch(e){ toast(e.message||'파일을 읽지 못했습니다.'); }
   });
   content.addEventListener('click',function(e){ if(!comparing) return; var el=e.target.closest?e.target.closest('[data-doc-change]'):null; if(el && content.contains(el)) selectChange(+el.getAttribute('data-doc-change'),false); });
-  var hm=$('doc-history-modal'); if(hm) hm.addEventListener('mousedown', function(e){ if(e.target===this) this.classList.remove('open'); });
+  var hm=$('doc-history-modal'); if(hm) hm.addEventListener('mousedown', function(e){ if(e.target===this) closeHistory(); });
+  // Esc는 맨 위 층 하나만 닫는다: 히스토리 창 → ⋯ 메뉴 → 메모·현재 서식 패널 → 검토 모드.
+  // 그 층 안에 포커스가 있었을 때만 연 버튼으로 포커스를 돌려준다.
+  // 본문·입력칸·선택 상자에서 누른 Esc는 패널·검토 모드를 닫지 않고 포커스도 그대로 둔다. 쓰던 글을 잃지 않게 한다.
+  var NON_TEXT_INPUT=/^(button|submit|reset|checkbox|radio|range|color|file|image|hidden)$/;
+  function isTextEntry(el){
+    if(!el || el===document.body) return false;
+    var tn=el.tagName;
+    if(tn==='TEXTAREA' || tn==='SELECT') return true;
+    if(tn==='INPUT') return !NON_TEXT_INPUT.test((el.type||'').toLowerCase());
+    return !!el.isContentEditable;
+  }
+  function onEscape(e){
+    if(e.defaultPrevented || e.isComposing || e.keyCode===229) return;   // 한글 조합을 취소하는 Esc는 건드리지 않는다
+    var a=document.activeElement, layer;
+    if(historyOpen()){ e.preventDefault(); closeHistory(); return; }
+    if(moreOpen()){ e.preventDefault(); setMore(false); return; }
+    if(isTextEntry(a)) return;
+    if(body.classList.contains('doc-notes-open')){ layer=$('doc-notes-panel'); e.preventDefault(); setNotes(false); if(layer && layer.contains(a)) returnFocus(['doc-notesBtn','doc-ebNote']); return; }
+    if(body.classList.contains('doc-inspector-open')){ layer=$('doc-inspector'); e.preventDefault(); setInspector(false); if(layer && layer.contains(a)) returnFocus(['doc-inspectorToggle']); return; }
+    if(comparing){ layer=$('doc-changes-bar'); e.preventDefault(); setCompare(false); if(layer && layer.contains(a)) returnFocus(['doc-changesBtn']); }
+  }
+  // 히스토리 창이 열려 있으면 Tab 이동을 창 안에 가둔다.
+  function trapHistoryFocus(e){
+    var m=$('doc-history-modal'), list=Array.prototype.filter.call(m.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])'),canFocus), a=document.activeElement;
+    if(!list.length) return;
+    if(!m.contains(a) || (e.shiftKey && a===list[0]) || (!e.shiftKey && a===list[list.length-1])){ e.preventDefault(); list[e.shiftKey?list.length-1:0].focus(); }
+  }
   document.addEventListener('keydown', function(e){
-    if(e.key==='Escape'){setMore(false);setInspector(false);setNotes(false);setCompare(false);var m=$('doc-history-modal');if(m)m.classList.remove('open');}
+    if(e.key==='Escape') onEscape(e);
+    if(e.key==='Tab' && historyOpen()) trapHistoryFocus(e);
     if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==='s'||e.key==='S')){ e.preventDefault(); saveToFile(false); }
     if((e.metaKey||e.ctrlKey)&&(e.key==='e'||e.key==='E')){ e.preventDefault(); setEdit(!editing); }
     // 직전 동작이 블록 삭제였을 때만 가로챈다. 그 뒤 다른 편집이 있었으면 브라우저 기본 되돌리기로 넘긴다.
@@ -840,7 +972,8 @@
   try{ document.execCommand('styleWithCSS',false,true); }catch(e){}
   updateEditorLayout();
   var authorInput=$('doc-notesAuthor'); if(authorInput) authorInput.value=currentAuthor();
-  reconcileNotes(); renderNotes(); lastSavedHtml=content.innerHTML; lastBackedUpHtml=lastSavedHtml; lastBackedUpNotes=JSON.stringify(notes);
+  reconcileNotes(); renderNotes(); lastSavedHtml=content.innerHTML; lastBackedUpHtml=lastSavedHtml; lastBackedUpNotes=JSON.stringify(notes); lastSavedNotes=lastBackedUpNotes;
+  syncModes(); renderSaveState();
   checkAutosave();
   (function(){ var by=body.dataset.docSavedBy||''; if(by && by!==currentAuthor() && history.length) toast(by+'이(가) 저장한 문서입니다. 변경 사항으로 수정된 부분을 볼 수 있습니다.',6000); })();
 
@@ -850,6 +983,8 @@
     edit:function(on){ setEdit(!!on); },
     save:function(){ return saveToFile(false); },
     isEditing:function(){ return editing; },
+    mode:function(m){ if(m==='view'||m==='edit'||m==='review') setMode(m); return currentMode(); },
+    saveStatus:function(){ var s=saveState; return {state:s.kind, reason:s.reason||'', dirty:isDirty(), text:($('doc-saveStatusText')||{}).textContent||''}; },
     author:function(name){ if(typeof name==='string'){ storeAuthor(name.trim()); } return currentAuthor(); },
     getReadOnlyHTML:function(){ return serializeReadOnly(); },
     attachToHTML:attachToHTML,

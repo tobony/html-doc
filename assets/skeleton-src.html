@@ -27,20 +27,24 @@ body{ margin:0; font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans
 <!-- ========================================================
      doc-editor 크롬 마크업 (엔진이 참조하는 고정 id · 수정 금지)
      ======================================================== -->
-<div id="doc-controls">
-  <button class="doc-ed-btn" id="doc-editToggle" title="편집 모드 (Cmd/Ctrl+E)">✎ 편집</button>
-  <button class="doc-ed-btn primary" id="doc-saveBtn" title="최초 저장 시 대상 파일 선택 (Cmd/Ctrl+S)">저장</button>
-  <button class="doc-ed-btn" id="doc-notesBtn" aria-expanded="false" aria-controls="doc-notes-panel" title="메모 보기·남기기">메모<span class="doc-ed-count" id="doc-notesCount"></span></button>
-  <button class="doc-ed-btn" id="doc-inspectorToggle" aria-expanded="false" aria-controls="doc-inspector">현재 서식</button>
-  <button class="doc-ed-btn" id="doc-moreToggle" aria-expanded="false" aria-controls="doc-more-actions">더보기 ▾</button>
-  <div id="doc-more-actions">
-  <button class="doc-ed-btn ghost" id="doc-changesBtn" title="저장본이나 파일과 비교해 바뀐 부분 표시">변경 사항</button>
-  <button class="doc-ed-btn ghost" id="doc-saveAsBtn" title="새 파일로 저장">다른 이름으로</button>
-  <button class="doc-ed-btn ghost" id="doc-exportBtn" title="편집기와 히스토리를 뺀 별도 HTML 내려받기">배포용 HTML 저장</button>
-  <button class="doc-ed-btn ghost" id="doc-attachBtn" title="다른 HTML 파일을 선택해 편집 가능한 사본으로 다운로드">HTML에 편집기 추가</button>
+<div id="doc-controls" role="region" aria-label="문서 편집기">
+  <div class="doc-ed-modes" role="group" aria-label="모드">
+    <button type="button" class="doc-ed-btn doc-ed-mode on" id="doc-viewBtn" aria-pressed="true" title="읽기 전용으로 보기">보기</button>
+    <button type="button" class="doc-ed-btn doc-ed-mode" id="doc-editToggle" aria-pressed="false" title="본문 편집 (Cmd/Ctrl+E)">편집</button>
+    <button type="button" class="doc-ed-btn doc-ed-mode" id="doc-changesBtn" aria-pressed="false" title="저장본이나 파일과 비교해 바뀐 부분 검토">검토</button>
+  </div>
+  <div class="doc-ed-status" id="doc-saveStatus" data-state="clean" title="마지막 저장 이후 바뀐 내용이 없습니다"><span class="doc-ed-status-dot" aria-hidden="true"></span><span id="doc-saveStatusText" role="status">변경 없음</span><button type="button" id="doc-saveStatusDismiss" aria-label="저장 오류 알림 닫기" title="알림 닫기" hidden>×</button></div>
+  <button type="button" class="doc-ed-btn" id="doc-notesBtn" aria-expanded="false" aria-controls="doc-notes-panel" title="메모 보기·남기기">메모<span class="doc-ed-count" id="doc-notesCount"></span></button>
+  <button type="button" class="doc-ed-btn" id="doc-inspectorToggle" aria-expanded="false" aria-controls="doc-inspector" aria-label="현재 서식"><span class="doc-ed-wide">현재 </span>서식</button>
+  <button type="button" class="doc-ed-btn primary" id="doc-saveBtn" title="최초 저장 시 대상 파일 선택 (Cmd/Ctrl+S)">저장</button>
+  <button type="button" class="doc-ed-btn" id="doc-moreToggle" aria-haspopup="menu" aria-expanded="false" aria-controls="doc-more-actions" aria-label="파일 작업 더보기" title="파일 작업 더보기">⋯</button>
+  <div id="doc-more-actions" role="menu" aria-label="파일 작업">
+  <button type="button" class="doc-ed-btn ghost" role="menuitem" tabindex="-1" id="doc-saveAsBtn" title="새 파일로 저장">다른 이름으로 저장</button>
+  <button type="button" class="doc-ed-btn ghost" role="menuitem" tabindex="-1" id="doc-exportBtn" title="편집기와 히스토리를 뺀 별도 HTML 내려받기">배포용 HTML 저장</button>
+  <button type="button" class="doc-ed-btn ghost" role="menuitem" tabindex="-1" id="doc-attachBtn" title="다른 HTML 파일을 선택해 편집 가능한 사본으로 다운로드">HTML에 편집기 추가</button>
   <input id="doc-attachFile" type="file" accept=".html,.htm,text/html" hidden>
-  <button class="doc-ed-btn ghost" id="doc-historyBtn" title="이전 저장본 보기·복원">히스토리</button>
-  <button class="doc-ed-btn ghost" id="doc-printBtn" title="인쇄">인쇄</button>
+  <button type="button" class="doc-ed-btn ghost" role="menuitem" tabindex="-1" id="doc-historyBtn" title="이전 저장본 보기·복원">히스토리</button>
+  <button type="button" class="doc-ed-btn ghost" role="menuitem" tabindex="-1" id="doc-printBtn" title="인쇄">인쇄</button>
   </div>
 </div>
 
@@ -149,7 +153,7 @@ body{ margin:0; font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans
 </div>
 
 <div class="doc-ed-modal" id="doc-history-modal">
-  <div class="doc-ed-modal-card">
+  <div class="doc-ed-modal-card" role="dialog" aria-modal="true" aria-label="저장 히스토리">
     <div class="doc-ed-modal-head"><h3>저장 히스토리</h3><button class="doc-ed-btn" id="doc-hist-close">닫기</button></div>
     <div class="doc-ed-modal-body"><div id="doc-hist-list"></div><div id="doc-hist-preview"></div></div>
   </div>
@@ -164,7 +168,7 @@ body{ margin:0; font-family:-apple-system,'Pretendard','Segoe UI',system-ui,sans
 <main id="doc-content" contenteditable="false">
 
   <h1>문서 제목</h1>
-  <p>여기에 내용을 작성하세요. 오른쪽 위 <strong>✎ 편집</strong> 버튼(또는 Cmd/Ctrl+E)을 누르면 글자·서식을 직접 고칠 수 있고, <strong>저장</strong>으로 같은 파일에 덮어쓸 수 있습니다.</p>
+  <p>여기에 내용을 작성하세요. 위쪽 <strong>편집</strong> 버튼(또는 Cmd/Ctrl+E)을 누르면 글자·서식을 직접 고칠 수 있고, <strong>저장</strong>으로 같은 파일에 덮어쓸 수 있습니다.</p>
 
 </main>
 

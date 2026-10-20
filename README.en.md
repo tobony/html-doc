@@ -6,13 +6,13 @@
 
 ![An example document on the desktop](docs/media/doc-desktop.png)
 
-**Current release: 1.7.0.** Agent instructions are in English, with a Korean reference. The editor and conversion-tool UI are currently **Korean**; document content can be in any language.
+**Current release: 1.8.0.** Agent instructions are in English, with a Korean reference. The editor and conversion-tool UI are currently **Korean**; document content can be in any language.
 
 ## Try it in a minute
 
 1. Download [demo.html](https://github.com/tonywjs/html-doc/releases/latest/download/demo.html).
 2. Open it in a browser. A double click is enough.
-3. Press **✎ 편집** (edit) at the top right and change any sentence.
+3. Press **편집** (edit) in the app bar at the top and change any sentence.
 4. Press **저장** (save). You pick the destination file once; after that it overwrites the same file.
 
 Already have an HTML file? Download [add-editor.html](https://github.com/tonywjs/html-doc/releases/latest/download/add-editor.html), open it, and choose your file to get an editable copy.
@@ -35,9 +35,9 @@ Select text and write a note; it anchors to that spot. Reply to it, mark it reso
 
 Notes live **inside the file**, so they travel with it. They are dropped from the read-only export.
 
-### Changes: see what came back edited
+### Review: see what came back edited
 
-Compare the body against a saved version or another HTML file, and see the difference laid over the document. Green is an addition, red a deletion, blue a word-level edit, purple a formatting change.
+Press **검토** (review) in the app bar to compare the body against a saved version or another HTML file, and see the difference laid over the document. Green is an addition, red a deletion, blue a word-level edit, purple a formatting change.
 
 ![Comparing changes and reverting one](docs/media/changes.gif)
 
@@ -61,13 +61,15 @@ To watch opening a returned document, reviewing the changes, reverting one, and 
 
 | Goal | How |
 |---|---|
-| Toggle editing | **✎ 편집** at the top right, or `Cmd/Ctrl+E` |
+| Switch view, edit and review | **보기** · **편집** · **검토** in the app bar; `Cmd/Ctrl+E` also toggles editing |
 | Change text and formatting | The toolbar: paragraph style, font, size, bold/italic/underline/strikethrough, text and background colour, alignment, lists, tables |
 | Inspect formatting at the caret | The **현재 서식** panel |
 | Save | **저장** or `Cmd/Ctrl+S` |
-| Save elsewhere | 더보기 → **다른 이름으로** |
+| Save elsewhere | **⋯** → **다른 이름으로 저장** |
 
 In supported browsers (Chrome, Edge and friends) you choose the destination file **once**. After that it overwrites the same file, though the browser may ask to renew write permission. Browsers without File System Access (Safari, Firefox) fall back to a download.
+
+The app bar always shows the save state: **변경 없음** (no changes), **저장 안 됨** (unsaved), **저장 중…** (saving), **저장됨 · time** (saved), **사본 다운로드함** (copy downloaded), or **저장 실패** (failed). A download is never shown as saved, because it does not overwrite the original file. A failure stays until the next successful save or until you dismiss it with ×. Saving keeps edit mode.
 
 ### Autosave and recovery
 
@@ -81,17 +83,17 @@ The first note or the first save asks for your name once and remembers it in the
 
 ### Read-only export
 
-더보기 → **배포용 HTML 저장** downloads a copy without the editor, the history, or the notes. The body, the design, and the document's own scripts stay. The original file is untouched.
+**⋯** → **배포용 HTML 저장** downloads a copy without the editor, the history, or the notes. The body, the design, and the document's own scripts stay. The original file is untouched.
 
 A normally saved file can carry previous versions in its history, so use the read-only export for anything you share outward.
 
 ### Adding the editor to existing HTML
 
-Open `tools/add-editor.html`, choose an HTML file, and download `<name>-편집가능.html`. The original is never overwritten. The same is available from inside an editable document under 더보기 → **HTML에 편집기 추가**.
+Open `tools/add-editor.html`, choose an HTML file, and download `<name>-편집가능.html`. The original is never overwritten. The same is available from inside an editable document under **⋯** → **HTML에 편집기 추가**.
 
 ### Mobile
 
-At 900px and below, edit, save, notes and the more menu sit in one row at the top. The rest lives in the more menu, and the formatting toolbar scrolls sideways.
+At 900px and below the app bar docks at the top. At 560px and below the save state moves to a second row. File actions live in the **⋯** menu, and the formatting toolbar scrolls sideways.
 
 ## Install as an agent skill
 

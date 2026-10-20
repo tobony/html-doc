@@ -2,7 +2,7 @@
 name: html-doc
 description: Create editable, standalone HTML documents, add an inline editor to existing HTML, and export clean read-only HTML. Use for reports, guides, letters, and other documents that users want to edit in a browser and save as HTML. Includes review tools: change comparison against saved versions and anchored notes with replies.
 metadata:
-  version: "1.7.0"
+  version: "1.8.0"
 ---
 
 # HTML Doc
@@ -48,15 +48,22 @@ Explain these distinctions accurately:
 - **Read-only export:** **배포용 HTML 저장** downloads a separate copy without editor UI, engine, history, backup identity, or temporary editing layout. The current unsaved body, original document styling/scripts, and inserted table presentation remain. External resources are not embedded automatically. This does not publish a website.
 - **Attach editor:** downloads an editable copy with empty history and no inherited backup ID or file connection.
 
-On screens up to 900px, extra actions are in **더보기**. The formatting toolbar scrolls horizontally, and **현재 서식** opens a collapsible inspector. Preserve the document's own responsive design.
+File actions (다른 이름으로 저장, 배포용 HTML 저장, HTML에 편집기 추가, 히스토리, 인쇄) are in the **⋯** menu at every width. On screens up to 900px the formatting toolbar scrolls horizontally, and **현재 서식** opens a collapsible inspector. Preserve the document's own responsive design.
 
 ## Review tools (1.6.0)
 
 - **Notes:** **메모** opens a side panel. Select body text and write in the box to attach a note to that text (`<mark class="doc-ed-note" data-doc-note="ID">`); without a selection the note applies to the whole document. Notes, replies, and resolved state live in `#doc-notes` inside the file. Anyone with the file can reply, resolve, or delete. Read-only export unwraps marks and drops the store.
-- **Change comparison:** **변경 사항** compares the current body with a baseline and overlays additions (green), deletions (red strikethrough), modified paragraphs (word-level marks), and format-only changes. Baselines: the state at the last save (when unsaved edits exist), any saved version in the history (labelled by author and time), or an HTML file. The default baseline is the most recent version saved by someone other than the current saver. **원래대로** reverts the selected change; the result still needs a regular save. Comparison is view-only; saving or exporting while comparing writes the clean body.
+- **Change comparison:** **검토** (formerly **변경 사항**) compares the current body with a baseline and overlays additions (green), deletions (red strikethrough), modified paragraphs (word-level marks), and format-only changes. Baselines: the state at the last save (when unsaved edits exist), any saved version in the history (labelled by author and time), or an HTML file. The default baseline is the most recent version saved by someone other than the current saver. **원래대로** reverts the selected change; the result still needs a regular save. Comparison is view-only; saving or exporting while comparing writes the clean body.
 - **Author name:** the editor asks for a name once per browser (first note or first save) and stores it in `localStorage` as `docedit:author`. It can be changed in the notes panel. The name is not stored in the document except as the provenance of a saved version (`data-doc-saved-by`, `data-doc-saved-at` on `body`) and in history entries (`author`).
 - **Backup safety:** the first regular save assigns `data-doc-id` so browser backups are keyed per document instead of per path. Backups record the provenance of the body they were made from; when a backup does not match the opened file, the restore banner says so, and restoring keeps the current body in the history first.
-- On screens up to 900px the **메모** control hides while editing (use the toolbar **메모** button) and **변경 사항** is in **더보기**.
+- On screens up to 900px the **메모** control hides while editing (use the toolbar **메모** button) and the save state moves to a second row at 560px and below.
+
+## App bar (1.8.0)
+
+- **보기 · 편집 · 검토** is one mode switch; exactly one is pressed. **검토** opens the change comparison. `DocEditor.mode('view'|'edit'|'review')` switches modes and returns the current one.
+- The bar always shows the save state: 변경 없음, 저장 안 됨, 저장 중…, 저장됨 · time, 사본 다운로드함 (a browser download, not an overwrite of the original), or 저장 실패 with the reason. Failures stay until the next successful save or until dismissed. `DocEditor.saveStatus()` returns `{state, reason, dirty, text}`.
+- Saving keeps edit mode; the saved file opens in view mode with a clean status. The page asks before closing only when the browser backup failed and unsaved changes exist.
+- In desktop view mode the bar floats over the document; in edit and review modes it docks at the top with the toolbar below it. Escape closes one layer at a time.
 
 ## Block deletion (1.7.0)
 
